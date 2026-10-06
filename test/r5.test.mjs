@@ -156,7 +156,7 @@ test('stage 2 removes static data and keeps the server API public', async () => 
 });
 
 test('deployment identity rejects unsupported stages', () => {
-  const config = { ...baseConfig, step: 3 };
+  const config = { ...baseConfig, step: 4 };
 
   assert.throws(() => deploymentIdentity(env, config));
 });
