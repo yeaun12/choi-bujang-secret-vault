@@ -94,6 +94,7 @@ export async function GET(request) {
     .from('notes')
     .select('id, title, content')
     .eq('id', id)
+    .eq('owner_id', auth.identity.userId)
     .maybeSingle();
 
   if (error) {
@@ -149,6 +150,7 @@ export async function PUT(request) {
       content: body,
     })
     .eq('id', id)
+    .eq('owner_id', auth.identity.userId)
     .select('id')
     .maybeSingle();
 
@@ -180,6 +182,7 @@ export async function DELETE(request) {
     .from('notes')
     .delete()
     .eq('id', id)
+    .eq('owner_id', auth.identity.userId)
     .select('id')
     .maybeSingle();
 
