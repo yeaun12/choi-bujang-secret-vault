@@ -3,50 +3,745 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BYTE BACK | 점령된 자료실</title>
+  <title>BYTE BACK | 개인 자료실</title>
+
   <style>
-    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
-    body { margin: 0; min-height: 100vh; background: #101a28; color: #ecf4ff; }
-    main { max-width: 760px; margin: 0 auto; padding: 44px 22px 64px; }
-    .eyebrow { color: #8ad8df; font-size: 14px; font-weight: 700; letter-spacing: .08em; }
-    h1 { margin: 16px 0; font-size: clamp(30px, 7vw, 48px); line-height: 1.2; }
-    p { font-size: 17px; line-height: 1.7; color: #bfd0e5; }
-    .notice { margin: 26px 0; padding: 18px; border: 1px solid #d07384; border-radius: 14px; color: #ffe3e8; background: #612a3544; }
-    ul { list-style: none; display: grid; gap: 12px; padding: 0; }
-    li { border: 1px solid #51667c; border-radius: 14px; padding: 17px 19px; background: #1a2a3d; }
-    strong { display: block; font-size: 18px; margin-bottom: 5px; }
-    li span { color: #bfd0e5; }
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #101a28;
+      color: #ecf4ff;
+    }
+
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 44px 22px 64px;
+    }
+
+    .eyebrow {
+      color: #8ad8df;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .08em;
+    }
+
+    h1 {
+      margin: 16px 0;
+      font-size: clamp(30px, 7vw, 48px);
+      line-height: 1.2;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 20px;
+    }
+
+    p {
+      font-size: 17px;
+      line-height: 1.7;
+      color: #bfd0e5;
+    }
+
+    .panel {
+      margin: 24px 0;
+      padding: 20px;
+      border: 1px solid #51667c;
+      border-radius: 14px;
+      background: #162437;
+    }
+
+    form {
+      display: grid;
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: #bfd0e5;
+      font-size: 14px;
+    }
+
+    input,
+    textarea {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid #51667c;
+      border-radius: 9px;
+      background: #101a28;
+      color: #ecf4ff;
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+
+    button {
+      width: fit-content;
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 9px;
+      background: #8ad8df;
+      color: #101a28;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      border: 1px solid #71859b;
+      background: transparent;
+      color: #dbe8f5;
+    }
+
+    button.danger {
+      border: 1px solid #d07384;
+      background: transparent;
+      color: #ffbec8;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .6;
+    }
+
+    .auth-status {
+      margin: 12px 0;
+      color: #bfd0e5;
+      font-size: 15px;
+    }
+
+    .message {
+      min-height: 1.4em;
+      margin: 10px 0 0;
+      color: #bfd0e5;
+      font-size: 14px;
+    }
+
+    .error {
+      color: #ffb7c3;
+    }
+
+    .notice {
+      margin: 26px 0;
+      padding: 18px;
+      border: 1px solid #51667c;
+      border-radius: 14px;
+      color: #dbe8f5;
+      background: #162437;
+    }
+
+    ul {
+      list-style: none;
+      display: grid;
+      gap: 12px;
+      padding: 0;
+    }
+
+    li {
+      border: 1px solid #51667c;
+      border-radius: 14px;
+      padding: 17px 19px;
+      background: #1a2a3d;
+    }
+
+    .note-title {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 18px;
+    }
+
+    .note-body {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: #bfd0e5;
+    }
+
+    .note-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
   </style>
 </head>
+
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 1단계 피해 확인</div>
-    <h1>점령된 자료실</h1>
-    <p>지금은 보호 장치가 없는 상태입니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
-    <div class="notice">로그인하지 않은 방문자도 자료를 볼 수 있습니다. 공개 범위를 확인하고, 다음 제작 단계에서 접근을 차례로 막아 주세요.</div>
-    <ul id="notes" aria-live="polite"><li>가상 자료를 불러오는 중입니다.</li></ul>
+    <div class="eyebrow">BYTE BACK · 3단계 인증 자료실</div>
+
+    <h1>개인 자료실</h1>
+
+    <p>
+      Supabase Auth 로그인 토큰을 서버에서 검증하고,
+      로그인한 사용자는 자신의 가상 자료를 만들고 관리할 수 있습니다.
+    </p>
+
+    <section class="panel" aria-labelledby="auth-title">
+      <h2 id="auth-title">계정</h2>
+
+      <form id="login-form">
+        <label>
+          이메일
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="username"
+            required
+          >
+        </label>
+
+        <label>
+          비밀번호
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+          >
+        </label>
+
+        <button id="login-button" type="submit">로그인</button>
+      </form>
+
+      <div id="logged-in" hidden>
+        <p id="auth-status" class="auth-status">
+          로그인되어 있습니다.
+        </p>
+
+        <button
+          id="logout-button"
+          class="secondary"
+          type="button"
+        >
+          로그아웃
+        </button>
+      </div>
+
+      <p
+        id="auth-error"
+        class="message error"
+        role="alert"
+      ></p>
+    </section>
+
+    <div class="notice">
+      자료 API는 로그인 토큰을 확인합니다.
+      로그인하지 않은 요청에는 자료를 반환하지 않습니다.
+    </div>
+
+    <section
+      id="create-panel"
+      class="panel"
+      aria-labelledby="create-title"
+      hidden
+    >
+      <h2 id="create-title">새 가상 자료</h2>
+
+      <form id="create-form">
+        <label>
+          제목
+          <input
+            id="note-title"
+            name="title"
+            type="text"
+            required
+          >
+        </label>
+
+        <label>
+          내용
+          <textarea
+            id="note-body"
+            name="body"
+            required
+          ></textarea>
+        </label>
+
+        <button id="create-button" type="submit">
+          자료 추가
+        </button>
+      </form>
+
+      <p
+        id="create-message"
+        class="message"
+        role="status"
+      ></p>
+    </section>
+
+    <section aria-labelledby="notes-title">
+      <h2 id="notes-title">내 가상 자료</h2>
+
+      <ul id="notes" aria-live="polite">
+        <li>로그인 후 가상 자료를 확인할 수 있습니다.</li>
+      </ul>
+    </section>
   </main>
+
   <script type="module">
-    const list = document.querySelector('#notes');
-    try {
-      const response = await fetch('/api/notes', { cache: 'no-store' });
-      if (!response.ok) throw new Error('공개 자료를 읽을 수 없습니다.');
-      const data = await response.json();
-      if (!Array.isArray(data.notes)) throw new Error('자료 형식이 맞지 않습니다.');
-      list.replaceChildren(...data.notes.map(note => {
-        const item = document.createElement('li');
-        const title = document.createElement('strong');
-        const content = document.createElement('span');
-        title.textContent = note.title;
-        content.textContent = note.content;
-        item.append(title, content);
-        return item;
-      }));
-    } catch (error) {
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
+
+    const SUPABASE_URL =
+      'https://vcckkpclsyokvlhwtvej.supabase.co';
+
+    const SUPABASE_PUBLISHABLE_KEY =
+      'sb_publishable_EA6DhbsC2mE_Wh0MjtFUIg_HosNsTC1';
+
+    const supabase = createClient(
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY
+    );
+
+    const loginForm =
+      document.querySelector('#login-form');
+
+    const emailInput =
+      document.querySelector('#email');
+
+    const passwordInput =
+      document.querySelector('#password');
+
+    const loginButton =
+      document.querySelector('#login-button');
+
+    const loggedIn =
+      document.querySelector('#logged-in');
+
+    const authError =
+      document.querySelector('#auth-error');
+
+    const logoutButton =
+      document.querySelector('#logout-button');
+
+    const createPanel =
+      document.querySelector('#create-panel');
+
+    const createForm =
+      document.querySelector('#create-form');
+
+    const noteTitleInput =
+      document.querySelector('#note-title');
+
+    const noteBodyInput =
+      document.querySelector('#note-body');
+
+    const createButton =
+      document.querySelector('#create-button');
+
+    const createMessage =
+      document.querySelector('#create-message');
+
+    const list =
+      document.querySelector('#notes');
+
+    function showAuthError(message) {
+      authError.textContent = message || '';
+    }
+
+    function showCreateMessage(message, isError = false) {
+      createMessage.textContent = message || '';
+      createMessage.classList.toggle('error', isError);
+    }
+
+    function showNotesMessage(message) {
       const item = document.createElement('li');
-      item.textContent = error.message;
+      item.textContent = message;
       list.replaceChildren(item);
     }
+
+    function showLoggedOut() {
+      loginForm.hidden = false;
+      loggedIn.hidden = true;
+      createPanel.hidden = true;
+
+      passwordInput.value = '';
+
+      showCreateMessage('');
+      showNotesMessage(
+        '로그인 후 가상 자료를 확인할 수 있습니다.'
+      );
+    }
+
+    function showLoggedIn() {
+      loginForm.hidden = true;
+      loggedIn.hidden = false;
+      createPanel.hidden = false;
+
+      passwordInput.value = '';
+    }
+
+    async function getSession() {
+      const { data, error } =
+        await supabase.auth.getSession();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return data.session;
+    }
+
+    async function apiRequest(path, options = {}) {
+      const session = await getSession();
+
+      if (!session?.access_token) {
+        throw new Error('로그인이 필요합니다.');
+      }
+
+      const headers =
+        new Headers(options.headers || {});
+
+      headers.set(
+        'Authorization',
+        `Bearer ${session.access_token}`
+      );
+
+      if (
+        options.body !== undefined &&
+        !headers.has('Content-Type')
+      ) {
+        headers.set(
+          'Content-Type',
+          'application/json'
+        );
+      }
+
+      const response = await fetch(path, {
+        ...options,
+        cache: 'no-store',
+        headers,
+      });
+
+      let data = null;
+
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(
+          '자료 API 응답 형식이 올바르지 않습니다.'
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data?.error === 'string'
+            ? data.error
+            : '자료 요청을 처리할 수 없습니다.'
+        );
+      }
+
+      return data;
+    }
+
+    function createActionButton(
+      label,
+      className,
+      handler
+    ) {
+      const button =
+        document.createElement('button');
+
+      button.type = 'button';
+      button.textContent = label;
+
+      if (className) {
+        button.className = className;
+      }
+
+      button.addEventListener(
+        'click',
+        handler
+      );
+
+      return button;
+    }
+
+    function renderNotes(notes) {
+      if (notes.length === 0) {
+        showNotesMessage(
+          '내가 만든 가상 자료가 없습니다.'
+        );
+        return;
+      }
+
+      const items = notes.map(note => {
+        const item =
+          document.createElement('li');
+
+        const title =
+          document.createElement('strong');
+
+        title.className = 'note-title';
+        title.textContent = note.title;
+
+        const body =
+          document.createElement('p');
+
+        body.className = 'note-body';
+        body.textContent = note.body;
+
+        const actions =
+          document.createElement('div');
+
+        actions.className = 'note-actions';
+
+        const editButton =
+          createActionButton(
+            '수정',
+            'secondary',
+            async () => {
+              const newTitle = window.prompt(
+                '새 제목을 입력하세요.',
+                note.title
+              );
+
+              if (newTitle === null) {
+                return;
+              }
+
+              const newBody = window.prompt(
+                '새 내용을 입력하세요.',
+                note.body
+              );
+
+              if (newBody === null) {
+                return;
+              }
+
+              editButton.disabled = true;
+              deleteButton.disabled = true;
+
+              try {
+                await apiRequest(
+                  `/api/notes/${encodeURIComponent(note.id)}`,
+                  {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                      title: newTitle,
+                      body: newBody,
+                    }),
+                  }
+                );
+
+                await loadNotes();
+              } catch (error) {
+                window.alert(error.message);
+              } finally {
+                editButton.disabled = false;
+                deleteButton.disabled = false;
+              }
+            }
+          );
+
+        const deleteButton =
+          createActionButton(
+            '삭제',
+            'danger',
+            async () => {
+              const confirmed =
+                window.confirm(
+                  `"${note.title}" 자료를 삭제할까요?`
+                );
+
+              if (!confirmed) {
+                return;
+              }
+
+              editButton.disabled = true;
+              deleteButton.disabled = true;
+
+              try {
+                await apiRequest(
+                  `/api/notes/${encodeURIComponent(note.id)}`,
+                  {
+                    method: 'DELETE',
+                  }
+                );
+
+                await loadNotes();
+              } catch (error) {
+                window.alert(error.message);
+              } finally {
+                editButton.disabled = false;
+                deleteButton.disabled = false;
+              }
+            }
+          );
+
+        actions.append(
+          editButton,
+          deleteButton
+        );
+
+        item.append(
+          title,
+          body,
+          actions
+        );
+
+        return item;
+      });
+
+      list.replaceChildren(...items);
+    }
+
+    async function loadNotes() {
+      showNotesMessage(
+        '가상 자료를 불러오는 중입니다.'
+      );
+
+      try {
+        const notes =
+          await apiRequest('/api/notes');
+
+        if (!Array.isArray(notes)) {
+          throw new Error(
+            '자료 목록 형식이 올바르지 않습니다.'
+          );
+        }
+
+        renderNotes(notes);
+      } catch (error) {
+        showNotesMessage(error.message);
+      }
+    }
+
+    async function applySession(session) {
+      showAuthError('');
+
+      if (!session?.user) {
+        showLoggedOut();
+        return;
+      }
+
+      showLoggedIn();
+      await loadNotes();
+    }
+
+    async function syncAuthState() {
+      try {
+        const session = await getSession();
+        await applySession(session);
+      } catch (error) {
+        showLoggedOut();
+        showAuthError(error.message);
+      }
+    }
+
+    loginForm.addEventListener(
+      'submit',
+      async event => {
+        event.preventDefault();
+
+        showAuthError('');
+        loginButton.disabled = true;
+
+        try {
+          const { data, error } =
+            await supabase.auth.signInWithPassword({
+              email: emailInput.value,
+              password: passwordInput.value,
+            });
+
+          if (error) {
+            throw new Error(error.message);
+          }
+
+          await applySession(data.session);
+        } catch (error) {
+          showLoggedOut();
+          showAuthError(error.message);
+        } finally {
+          loginButton.disabled = false;
+        }
+      }
+    );
+
+    logoutButton.addEventListener(
+      'click',
+      async () => {
+        showAuthError('');
+        logoutButton.disabled = true;
+
+        try {
+          const { error } =
+            await supabase.auth.signOut();
+
+          if (error) {
+            throw new Error(error.message);
+          }
+
+          showLoggedOut();
+        } catch (error) {
+          showAuthError(error.message);
+        } finally {
+          logoutButton.disabled = false;
+        }
+      }
+    );
+
+    createForm.addEventListener(
+      'submit',
+      async event => {
+        event.preventDefault();
+
+        showCreateMessage('');
+        createButton.disabled = true;
+
+        try {
+          await apiRequest(
+            '/api/notes',
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                title: noteTitleInput.value,
+                body: noteBodyInput.value,
+              }),
+            }
+          );
+
+          createForm.reset();
+
+          showCreateMessage(
+            '가상 자료를 추가했습니다.'
+          );
+
+          await loadNotes();
+        } catch (error) {
+          showCreateMessage(
+            error.message,
+            true
+          );
+        } finally {
+          createButton.disabled = false;
+        }
+      }
+    );
+
+    supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        void applySession(session);
+      }
+    );
+
+    await syncAuthState();
   </script>
 </body>
 </html>
