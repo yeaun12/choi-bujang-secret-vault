@@ -22,9 +22,9 @@ async function hasJsonError(response) {
 }
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3].includes(config.step)) {
+  if (![1, 2, 3, 4].includes(config.step)) {
     throw new Error(
-      'src/attack-check.mjs currently supports stages 1 through 3.'
+      'src/attack-check.mjs currently supports stages 1 through 4.'
     );
   }
 

@@ -6,8 +6,8 @@ const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'data.json');
 const output = resolve(root, 'public', 'data.json');
 const config = JSON.parse(await readFile(resolve(root, 'aleph.config.json'), 'utf8'));
-if (![1, 2, 3].includes(config.step)) {
-  throw new Error('이 빌드 스크립트는 현재 1단계부터 3단계까지 지원합니다.');
+if (![1, 2, 3, 4].includes(config.step)) {
+  throw new Error('이 빌드 스크립트는 현재 1단계부터 4단계까지 지원합니다.');
 }
 const data = JSON.parse(await readFile(source, 'utf8'));
 if (!Array.isArray(data.notes)) {
