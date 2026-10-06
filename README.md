@@ -72,3 +72,47 @@ git grep -n -F -- "<검증할 메모 문자열>"
 3단계에서는 인증까지만 완성하며 개별 자료의 소유권 검사는 아직 적용하지 않습니다. 따라서 로그인한 다른 사용자가 자료 ID를 알고 있는 경우 단일 조회·수정·삭제에 접근할 수 있는 상태가 남아 있으며, 이 사용자 간 자원 접근 통제는 4단계에서 해결합니다.
 
 Supabase `notes` 테이블은 RLS를 계속 활성화하고 `anon` 및 `authenticated` 역할의 직접 테이블 접근 권한은 부여하지 않습니다. 실제 CRUD는 로그인 토큰을 검증한 Vercel 서버 함수가 서버 전용 권한으로 수행합니다.
+
+## 4단계: 로그인 사용자별 자료 소유권 제한
+
+4단계에서는 로그인 여부 확인에 더해, 서버가 검증한 사용자 ID와 자료의 `owner_id`를 비교하여 다른 사용자의 자료에 접근하지 못하도록 제한합니다.
+
+기존 가상 자료는 학습용 A/B 사용자 소유로 나누어 `owner_id`를 연결했습니다. 서버는 URL이나 요청 본문의 사용자 정보를 신뢰하지 않고 `src/verify-login.mjs`가 검증한 `userId`만 소유권 판단에 사용합니다.
+
+자료 API의 동작은 다음과 같습니다.
+
+- `GET /api/notes` — 검증된 사용자의 `owner_id`와 일치하는 자료 목록만 반환
+- `POST /api/notes` — 새 자료의 `owner_id`를 검증된 `userId`로 저장
+- `GET /api/notes/:id` — 자료 ID와 `owner_id`가 모두 일치할 때만 반환
+- `PUT /api/notes/:id` — 본인 소유 자료의 제목과 본문만 수정
+- `DELETE /api/notes/:id` — 본인 소유 자료만 삭제
+
+개별 자료 조회·수정·삭제는 `id`와 `owner_id`를 함께 조건으로 사용합니다. 다른 사용자가 자료 ID를 알고 요청해도 대상 행을 찾지 못한 것과 동일하게 `404` JSON 오류를 반환합니다.
+
+서버 API는 서버 전용 Supabase 권한을 사용하므로 RLS에만 의존하지 않고 API에서 소유권을 별도로 검사합니다. 데이터베이스에도 추가 방어선으로 RLS와 최소 권한을 적용했습니다.
+
+`public.notes`의 직접 테이블 권한은 다음과 같이 구성합니다.
+
+- `anon` — 직접 테이블 권한 없음
+- `authenticated` — `SELECT`, `INSERT`, `UPDATE`, `DELETE`
+- `service_role` — 서버 API용 CRUD 권한 유지
+
+RLS 정책은 모두 `auth.uid() = owner_id`를 기준으로 합니다.
+
+- SELECT — 기존 행의 소유자가 본인일 때만 허용
+- INSERT — 새 행의 소유자가 본인일 때만 허용
+- UPDATE — 기존 행과 수정 후 행의 소유자가 모두 본인일 때만 허용
+- DELETE — 기존 행의 소유자가 본인일 때만 허용
+
+Preview에서 A/B 계정을 사용해 사용자 간 접근을 직접 확인했습니다. B 로그인 상태에서 A 소유 자료에 대한 GET·PUT·DELETE 요청은 모두 404로 거부되었고, A와 B는 각각 자신의 자료를 생성·조회·수정·삭제할 수 있었습니다.
+
+Supabase Data API를 publishable key의 anon 역할로 직접 호출한 요청도 401과 테이블 권한 오류로 거부되는 것을 확인했습니다.
+
+4단계 Preview에서는 `/aleph.json`의 `step` 값이 4인 것을 확인했고, 비로그인 `/api/notes` 요청은 401 JSON 오류를 반환했습니다. 첫 화면 응답의 `X-Content-Type-Options: nosniff` 보안 헤더도 유지됩니다.
+
+로컬 회귀 확인은 다음 명령으로 실행합니다.
+
+```text
+npm run test:r5
+npm run build -- --local
+```
