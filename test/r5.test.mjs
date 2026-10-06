@@ -155,8 +155,19 @@ test('stage 2 removes static data and keeps the server API public', async () => 
   }
 });
 
-test('deployment identity rejects unsupported stages', () => {
+test('deployment identity supports stage 4', () => {
   const config = { ...baseConfig, step: 4 };
+
+  const identity = deploymentIdentity(env, config);
+
+  assert.equal(identity.schema, 'aleph.defense.deployment.v1');
+  assert.equal(identity.step, 4);
+  assert.equal(identity.sampleMarker, 'SAMPLE_NOTE_1');
+  assert.equal(identity.judgeIssuer, config.judgeIssuer);
+});
+
+test('deployment identity rejects unsupported stages', () => {
+  const config = { ...baseConfig, step: 5 };
 
   assert.throws(() => deploymentIdentity(env, config));
 });

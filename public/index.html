@@ -182,13 +182,13 @@
 
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 3단계 인증 자료실</div>
+    <div class="eyebrow">BYTE BACK · 4단계 소유권 보호 자료실</div>
 
     <h1>개인 자료실</h1>
 
     <p>
       Supabase Auth 로그인 토큰을 서버에서 검증하고,
-      로그인한 사용자는 자신의 가상 자료를 만들고 관리할 수 있습니다.
+      검증된 사용자와 자료 소유자를 비교해 자신의 가상 자료만 만들고 관리할 수 있습니다.
     </p>
 
     <section class="panel" aria-labelledby="auth-title">
@@ -242,8 +242,8 @@
     </section>
 
     <div class="notice">
-      자료 API는 로그인 토큰을 확인합니다.
-      로그인하지 않은 요청에는 자료를 반환하지 않습니다.
+      자료 API는 로그인 토큰과 자료 소유자를 확인합니다.
+      로그인하지 않았거나 본인 소유가 아닌 자료 요청에는 자료를 반환하지 않습니다.
     </div>
 
     <section
