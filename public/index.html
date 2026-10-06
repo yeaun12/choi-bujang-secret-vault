@@ -87,7 +87,12 @@
       background: #612a3544;
     }
 
-    ul { list-style: none; display: grid; gap: 12px; padding: 0; }
+    ul {
+      list-style: none;
+      display: grid;
+      gap: 12px;
+      padding: 0;
+    }
 
     li {
       border: 1px solid #51667c;
@@ -96,19 +101,30 @@
       background: #1a2a3d;
     }
 
-    strong { display: block; font-size: 18px; margin-bottom: 5px; }
-    li span { color: #bfd0e5; }
+    strong {
+      display: block;
+      font-size: 18px;
+      margin-bottom: 5px;
+    }
 
-    [hidden] { display: none !important; }
+    li span {
+      color: #bfd0e5;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 3단계 로그인 준비</div>
+    <div class="eyebrow">BYTE BACK · 3단계 로그인</div>
+
     <h1>자료실 로그인</h1>
+
     <p>
-      Supabase Auth로 로그인 상태를 확인합니다.
-      자료 API의 접근 차단은 다음 제작 단계에서 적용합니다.
+      Supabase Auth로 로그인 상태를 확인하고,
+      로그인한 요청만 자료 API에 접근할 수 있습니다.
     </p>
 
     <section class="auth-panel" aria-labelledby="auth-title">
@@ -149,12 +165,12 @@
     </section>
 
     <div class="notice">
-      현재 제작 1에서는 로그인 화면만 추가했습니다.
-      자료 API 인증은 아직 적용하지 않았습니다.
+      자료 API는 로그인 토큰을 확인합니다.
+      로그인하지 않은 요청에는 가상 자료를 반환하지 않습니다.
     </div>
 
     <ul id="notes" aria-live="polite">
-      <li>가상 자료를 불러오는 중입니다.</li>
+      <li>로그인 후 가상 자료를 확인할 수 있습니다.</li>
     </ul>
   </main>
 
@@ -199,20 +215,91 @@
       authError.textContent = message || '';
     }
 
+    function showNotesMessage(message) {
+      const item = document.createElement('li');
+      item.textContent = message;
+      list.replaceChildren(item);
+    }
+
+    function renderNotes(notes) {
+      list.replaceChildren(...notes.map(note => {
+        const item = document.createElement('li');
+        const title = document.createElement('strong');
+        const content = document.createElement('span');
+
+        title.textContent = note.title;
+        content.textContent = note.content;
+
+        item.append(title, content);
+        return item;
+      }));
+    }
+
+    async function loadNotes(session) {
+      if (!session?.access_token) {
+        showNotesMessage('로그인 후 가상 자료를 확인할 수 있습니다.');
+        return;
+      }
+
+      showNotesMessage('가상 자료를 불러오는 중입니다.');
+
+      try {
+        const response = await fetch('/api/notes', {
+          cache: 'no-store',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+
+        let data = null;
+
+        try {
+          data = await response.json();
+        } catch {
+          throw new Error('자료 API 응답 형식이 올바르지 않습니다.');
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            typeof data?.error === 'string'
+              ? data.error
+              : '자료를 읽을 수 없습니다.'
+          );
+        }
+
+        if (!Array.isArray(data.notes)) {
+          throw new Error('자료 형식이 맞지 않습니다.');
+        }
+
+        renderNotes(data.notes);
+      } catch (error) {
+        showNotesMessage(error.message);
+      }
+    }
+
+    async function applySession(session) {
+      showAuthError('');
+
+      if (session?.user) {
+        showLoggedIn(session.user);
+      } else {
+        showLoggedOut();
+      }
+
+      await loadNotes(session);
+    }
+
     async function syncAuthState() {
       const { data, error } = await supabase.auth.getSession();
 
       if (error) {
         showLoggedOut();
         showAuthError(error.message);
+        showNotesMessage('로그인 후 가상 자료를 확인할 수 있습니다.');
         return;
       }
 
-      if (data.session?.user) {
-        showLoggedIn(data.session.user);
-      } else {
-        showLoggedOut();
-      }
+      await applySession(data.session);
     }
 
     loginForm.addEventListener('submit', async event => {
@@ -230,13 +317,15 @@
         if (error) {
           showLoggedOut();
           showAuthError(error.message);
+          showNotesMessage('로그인 후 가상 자료를 확인할 수 있습니다.');
           return;
         }
 
-        showLoggedIn(data.user);
+        await applySession(data.session);
       } catch {
         showLoggedOut();
         showAuthError('로그인 요청을 처리할 수 없습니다.');
+        showNotesMessage('로그인 후 가상 자료를 확인할 수 있습니다.');
       } finally {
         loginButton.disabled = false;
       }
@@ -254,7 +343,7 @@
           return;
         }
 
-        showLoggedOut();
+        await applySession(null);
       } catch {
         showAuthError('로그아웃 요청을 처리할 수 없습니다.');
       } finally {
@@ -263,44 +352,10 @@
     });
 
     supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        showLoggedIn(session.user);
-      } else {
-        showLoggedOut();
-      }
+      void applySession(session);
     });
 
     await syncAuthState();
-
-    try {
-      const response = await fetch('/api/notes', { cache: 'no-store' });
-
-      if (!response.ok) {
-        throw new Error('공개 자료를 읽을 수 없습니다.');
-      }
-
-      const data = await response.json();
-
-      if (!Array.isArray(data.notes)) {
-        throw new Error('자료 형식이 맞지 않습니다.');
-      }
-
-      list.replaceChildren(...data.notes.map(note => {
-        const item = document.createElement('li');
-        const title = document.createElement('strong');
-        const content = document.createElement('span');
-
-        title.textContent = note.title;
-        content.textContent = note.content;
-
-        item.append(title, content);
-        return item;
-      }));
-    } catch (error) {
-      const item = document.createElement('li');
-      item.textContent = error.message;
-      list.replaceChildren(item);
-    }
   </script>
 </body>
 </html>
