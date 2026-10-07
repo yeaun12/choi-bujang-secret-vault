@@ -13,10 +13,6 @@ from public, anon, authenticated;
 
 grant select, insert, update, delete
 on table public.notes
-to authenticated;
-
-grant select, insert, update, delete
-on table public.notes
 to service_role;
 
 drop policy if exists notes_select_own

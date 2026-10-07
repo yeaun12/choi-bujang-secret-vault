@@ -116,3 +116,67 @@ Supabase Data API를 publishable key의 anon 역할로 직접 호출한 요청�
 npm run test:r5
 npm run build -- --local
 ```
+
+## 5단계: 자료 요청을 서버 한곳으로 모으기
+
+5단계에서는 브라우저가 Supabase의 원본 자료 API를 직접 호출할 수 있는 경로를 차단하고, 메모 읽기·추가·수정·삭제가 Vercel 서버 함수를 통해서만 처리되도록 구성했습니다.
+
+브라우저의 메모 관련 코드를 확인한 결과, 기존 메모 CRUD는 이미 `/api/notes` 서버 함수를 통해 수행되고 있었으며 `supabase.from(...)` 또는 Supabase REST 자료 API를 직접 호출하는 코드는 없었습니다. 따라서 제작 1에서는 메모 CRUD 코드를 별도로 변경하지 않았습니다.
+
+4단계에서는 `authenticated` 역할에 `SELECT`, `INSERT`, `UPDATE`, `DELETE` 직접 테이블 권한이 있었기 때문에 publishable key와 로그인 토큰을 이용하면 Supabase REST API를 통해 본인 소유 메모를 직접 조회하거나 수정할 수 있었습니다. 실제 권한 회수 전 확인에서 원본 REST 조회와 수정 요청이 모두 HTTP 200으로 성공했습니다.
+
+5단계에서는 `public.notes`에 대한 `PUBLIC`, `anon`, `authenticated`의 직접 권한을 모두 회수했습니다. 서버 함수가 사용하는 `service_role`의 CRUD 권한은 유지했습니다. 기존 RLS 소유권 정책과 서버 API의 로그인·소유자 검사는 그대로 유지했습니다.
+
+현재 직접 테이블 권한은 다음과 같습니다.
+
+- `anon` → 직접 CRUD 권한 없음
+- `authenticated` → 직접 CRUD 권한 없음
+- `service_role` → `SELECT`, `INSERT`, `UPDATE`, `DELETE`
+
+권한 회수 후 같은 원본 Supabase REST 요청을 다시 확인했습니다.
+
+- publishable key + 로그인 토큰 직접 조회 → HTTP 403, `permission denied for table notes`
+- publishable key + 로그인 토큰 직접 수정 → HTTP 403, `permission denied for table notes`
+- publishable key만 사용한 직접 조회 → HTTP 401, `permission denied for table notes`
+
+서버 함수 경로는 권한 회수 뒤에도 정상 동작했습니다. A 계정은 자신의 메모 조회·생성·수정·삭제가 모두 가능했고, B 계정에서는 B 소유 자료만 표시되었습니다. B가 A 소유 메모를 직접 조회한 요청은 404 JSON 오류로 거부되었고, 인증 없는 `/api/notes` 요청은 401 JSON 오류로 거부되었습니다.
+
+브라우저 화면 코드에서 Supabase 공개키를 제거하기 위해 로그인 처리도 서버 함수로 이동했습니다.
+
+- `POST /api/auth` → 이메일·비밀번호 로그인
+- `PUT /api/auth` → 세션 갱신
+- `DELETE /api/auth` → 로그아웃
+
+브라우저에서는 Supabase SDK와 Supabase 프로젝트 URL, publishable key를 사용하지 않습니다. 로그인 후 받은 access token만 메모 API의 `Authorization: Bearer ...` 헤더에 사용하며, refresh token은 JavaScript에 노출하지 않고 HttpOnly·Secure 쿠키에 저장합니다.
+
+새 인증 구조에서도 다음 동작을 Preview에서 확인했습니다.
+
+- A 로그인 성공
+- 새로고침 후 로그인 상태 복구
+- A 메모 조회·생성·수정·삭제 정상
+- 로그아웃 정상
+- 로그아웃 후 새로고침해도 로그아웃 상태 유지
+
+`aleph.config.json`의 `originalApiUrl`에는 쿼리가 없는 원본 자료 API 주소를 기록했습니다. `/aleph.json`에는 현재 서버에서 사용하는 다음 8개 `allowedRoutes`가 출력됩니다.
+
+- `POST /api/auth`
+- `PUT /api/auth`
+- `DELETE /api/auth`
+- `GET /api/notes`
+- `POST /api/notes`
+- `GET /api/notes/:id`
+- `PUT /api/notes/:id`
+- `DELETE /api/notes/:id`
+
+Preview 첫 화면 응답에서 `X-Content-Type-Options: nosniff`가 유지되는 것을 확인했습니다. 배포된 화면 소스에서도 Supabase publishable key, Supabase 프로젝트 주소, Supabase JS SDK 문자열이 존재하지 않는 것을 확인했습니다.
+
+로컬 검증은 다음 명령으로 수행했습니다.
+
+```text
+node --check api\auth\index.js
+npm run test:r5
+npm run build -- --local
+git diff --check
+```
+
+`npm run test:r5`는 6개 테스트가 모두 통과했고, 로컬 빌드도 정상 완료되었습니다.
