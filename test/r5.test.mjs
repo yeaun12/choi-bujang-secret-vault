@@ -8,6 +8,9 @@ const baseConfig = {
   sampleMarker: 'SAMPLE_NOTE_1',
   publicAppUrl: 'https://student-defense.vercel.app',
   allowedRoutes: [
+    'POST /api/auth',
+    'PUT /api/auth',
+    'DELETE /api/auth',
     'GET /api/notes',
     'POST /api/notes',
     'GET /api/notes/:id',

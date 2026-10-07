@@ -296,18 +296,8 @@
   </main>
 
   <script type="module">
-    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
-
-    const SUPABASE_URL =
-      'https://vcckkpclsyokvlhwtvej.supabase.co';
-
-    const SUPABASE_PUBLISHABLE_KEY =
-      'sb_publishable_EA6DhbsC2mE_Wh0MjtFUIg_HosNsTC1';
-
-    const supabase = createClient(
-      SUPABASE_URL,
-      SUPABASE_PUBLISHABLE_KEY
-    );
+    let currentSession = null;
+    let refreshInFlight = null;
 
     const loginForm =
       document.querySelector('#login-form');
@@ -387,21 +377,79 @@
       passwordInput.value = '';
     }
 
-    async function getSession() {
-      const { data, error } =
-        await supabase.auth.getSession();
+        function hasFreshSession(session) {
+      return Boolean(
+        session?.accessToken
+        && Number.isFinite(session?.expiresAt)
+        && session.expiresAt * 1000
+          > Date.now() + 60_000
+      );
+    }
 
-      if (error) {
-        throw new Error(error.message);
+    async function refreshSession() {
+      if (refreshInFlight) {
+        return refreshInFlight;
       }
 
-      return data.session;
+      refreshInFlight = (async () => {
+        const response = await fetch(
+          '/api/auth',
+          {
+            method: 'PUT',
+            cache: 'no-store',
+          }
+        );
+
+        if (response.status === 401) {
+          currentSession = null;
+          return null;
+        }
+
+        let data;
+
+        try {
+          data = await response.json();
+        } catch {
+          throw new Error(
+            'Authentication response is invalid.'
+          );
+        }
+
+        if (
+          !response.ok
+          || !data?.session?.accessToken
+        ) {
+          throw new Error(
+            typeof data?.error === 'string'
+              ? data.error
+              : 'Session refresh failed.'
+          );
+        }
+
+        currentSession = data.session;
+
+        return currentSession;
+      })();
+
+      try {
+        return await refreshInFlight;
+      } finally {
+        refreshInFlight = null;
+      }
+    }
+
+    async function getSession() {
+      if (hasFreshSession(currentSession)) {
+        return currentSession;
+      }
+
+      return refreshSession();
     }
 
     async function apiRequest(path, options = {}) {
       const session = await getSession();
 
-      if (!session?.access_token) {
+      if (!session?.accessToken) {
         throw new Error('로그인이 필요합니다.');
       }
 
@@ -410,7 +458,7 @@
 
       headers.set(
         'Authorization',
-        `Bearer ${session.access_token}`
+        `Bearer ${session.accessToken}`
       );
 
       if (
@@ -626,7 +674,7 @@
     async function applySession(session) {
       showAuthError('');
 
-      if (!session?.user) {
+      if (!session?.accessToken) {
         showLoggedOut();
         return;
       }
@@ -654,17 +702,45 @@
         loginButton.disabled = true;
 
         try {
-          const { data, error } =
-            await supabase.auth.signInWithPassword({
-              email: emailInput.value,
-              password: passwordInput.value,
-            });
+                    const response = await fetch(
+            '/api/auth',
+            {
+              method: 'POST',
+              cache: 'no-store',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                email: emailInput.value,
+                password: passwordInput.value,
+              }),
+            }
+          );
 
-          if (error) {
-            throw new Error(error.message);
+          let data;
+
+          try {
+            data = await response.json();
+          } catch {
+            throw new Error(
+              'Authentication response is invalid.'
+            );
           }
 
-          await applySession(data.session);
+          if (
+            !response.ok
+            || !data?.session?.accessToken
+          ) {
+            throw new Error(
+              typeof data?.error === 'string'
+                ? data.error
+                : 'Login failed.'
+            );
+          }
+
+          currentSession = data.session;
+
+          await applySession(currentSession);
         } catch (error) {
           showLoggedOut();
           showAuthError(error.message);
@@ -681,13 +757,45 @@
         logoutButton.disabled = true;
 
         try {
-          const { error } =
-            await supabase.auth.signOut();
+                    const session = currentSession;
 
-          if (error) {
-            throw new Error(error.message);
+          if (!session?.accessToken) {
+            currentSession = null;
+            showLoggedOut();
+            return;
           }
 
+          const response = await fetch(
+            '/api/auth',
+            {
+              method: 'DELETE',
+              cache: 'no-store',
+              headers: {
+                Authorization:
+                  `Bearer ${session.accessToken}`,
+              },
+            }
+          );
+
+          let data;
+
+          try {
+            data = await response.json();
+          } catch {
+            throw new Error(
+              'Authentication response is invalid.'
+            );
+          }
+
+          if (!response.ok) {
+            throw new Error(
+              typeof data?.error === 'string'
+                ? data.error
+                : 'Sign out failed.'
+            );
+          }
+
+          currentSession = null;
           showLoggedOut();
         } catch (error) {
           showAuthError(error.message);
@@ -732,12 +840,6 @@
         } finally {
           createButton.disabled = false;
         }
-      }
-    );
-
-    supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        void applySession(session);
       }
     );
 
