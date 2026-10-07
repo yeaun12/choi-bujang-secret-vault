@@ -39,6 +39,7 @@ test('build identity preserves stage 1 behavior', () => {
     judgeIssuer: config.judgeIssuer,
     sampleMarker: config.sampleMarker,
     allowedRoutes: config.allowedRoutes,
+    originalApiUrl: config.originalApiUrl,
   });
 
   assert.throws(() =>
@@ -167,7 +168,12 @@ test('stage 2 removes static data and keeps the server API public', async () => 
 });
 
 test('deployment identity supports stage 5', () => {
-  const config = { ...baseConfig, step: 5 };
+  const config = {
+    ...baseConfig,
+    step: 5,
+    originalApiUrl:
+      'https://student-project.supabase.co/rest/v1/notes',
+  };
 
   const identity = deploymentIdentity(env, config);
 
@@ -176,6 +182,10 @@ test('deployment identity supports stage 5', () => {
   assert.equal(identity.sampleMarker, 'SAMPLE_NOTE_1');
   assert.equal(identity.judgeIssuer, config.judgeIssuer);
   assert.deepEqual(identity.allowedRoutes, config.allowedRoutes);
+  assert.equal(
+    identity.originalApiUrl,
+    config.originalApiUrl
+  );
 });
 
 test('deployment identity rejects unsupported stages', () => {
