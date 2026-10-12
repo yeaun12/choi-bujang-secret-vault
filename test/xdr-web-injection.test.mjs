@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { decide } from '../xdr/web-injection/decide.mjs';
 import { projectAlerts } from '../xdr/web-injection/read-alerts.mjs';
 import { runWebInjection } from '../scripts/xdr-run-web-injection.mjs';
+import { runXdr } from '../scripts/xdr-run.mjs';
 import { isDenied } from '../xdr/web-injection/respond.mjs';
 
 const fixture = JSON.parse(await readFile(new URL('../xdr/fixtures/web-injection.json', import.meta.url), 'utf8'));
@@ -100,5 +101,25 @@ test('local replay produces 8/9/9, 15-minute expiry, and sanitized alerts', asyn
     assert.doesNotMatch(log, /\/search\?|\/notes\?|password=|authorization:|token=/i);
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('unaltered official runner classifies 26 course events in isolated directory', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'official-xdr-web-'));
+  try {
+    await mkdir(join(root, 'xdr/fixtures'), { recursive: true });
+    await mkdir(join(root, 'xdr/web-injection'), { recursive: true });
+    await writeFile(join(root, 'xdr/fixtures/web-injection.json'), JSON.stringify(fixture));
+    await copyFile(new URL('../xdr/web-injection/decide.mjs', import.meta.url),
+      join(root, 'xdr/web-injection/decide.mjs'));
+    const report = await runXdr({ root, moduleKey: 'web-injection' });
+    assert.deepEqual(Object.keys(report), ['schema', 'moduleKey', 'decisions', 'counts']);
+    assert.equal(report.schema, 'aleph.xdr.result.v1');
+    assert.deepEqual(report.counts, checkCounts);
+    assert.equal(report.decisions.length, 26);
+    const saved = JSON.parse(await readFile(join(root, 'xdr/web-injection/result.json'), 'utf8'));
+    assert.deepEqual(saved, report);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
