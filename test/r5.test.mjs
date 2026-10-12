@@ -188,8 +188,56 @@ test('deployment identity supports stage 5', () => {
   );
 });
 
-test('deployment identity rejects unsupported stages', () => {
-  const config = { ...baseConfig, step: 6 };
+test('deployment identity supports stage 6 without changing metadata', () => {
+  const config = {
+    ...baseConfig,
+    step: 6,
+    originalApiUrl: 'https://student-project.supabase.co/rest/v1/notes',
+  };
+  const identity = deploymentIdentity(env, config);
+  assert.equal(identity.step, 6);
+  assert.equal(identity.schema, 'aleph.defense.deployment.v1');
+  assert.equal(identity.judgeIssuer, config.judgeIssuer);
+  assert.deepEqual(identity.allowedRoutes, config.allowedRoutes);
+  assert.equal(identity.originalApiUrl, config.originalApiUrl);
+});
 
+test('stage 6 self-check retains HTTP evidence, not invented device checks', async () => {
+  const originalFetch = globalThis.fetch;
+  const config = { ...baseConfig, step: 6 };
+  const requests = [];
+  try {
+    globalThis.fetch = async (url, init = {}) => {
+      const pathname = new URL(url).pathname;
+      requests.push([pathname, init.method ?? 'GET']);
+      if (pathname === '/data.json') {
+        return new Response('Not Found', { status: 404 });
+      }
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    const results = await runAttackChecks(config);
+    assert.deepEqual(requests, [
+      ['/data.json', 'GET'],
+      ['/api/notes', 'GET'],
+      ['/api/notes', 'POST'],
+      ['/api/notes', 'GET'],
+    ]);
+    assert.deepEqual(results.map((item) => item.attackId), [
+      'static_note_file_removed',
+      'anonymous_note_list_denied',
+      'anonymous_note_create_denied',
+      'invalid_login_token_denied',
+    ]);
+    assert.ok(results.every((item) => /HTTP (401|404)/u.test(item.observed)));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('deployment identity rejects unsupported stages', () => {
+  const config = { ...baseConfig, step: 7 };
   assert.throws(() => deploymentIdentity(env, config));
 });
