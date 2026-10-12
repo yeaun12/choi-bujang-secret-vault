@@ -1,0 +1,70 @@
+{
+  "schema": "aleph.xdr.web-injection.patterns.v1",
+  "references": [
+    "https://attack.mitre.org/techniques/T1190/",
+    "https://owasp.org/www-community/attacks/SQL_Injection",
+    "https://owasp.org/www-community/attacks/xss/",
+    "https://owasp.org/www-community/attacks/Path_Traversal"
+  ],
+  "patterns": [
+    {
+      "name": "repeated_sql_injection",
+      "technique": "T1190",
+      "condition": {
+        "mitreT1190": true,
+        "minRuleLevel": 10,
+        "minOccurrences": 8,
+        "requestIndicators": [
+          "SQL syntax fragments",
+          "database query chaining"
+        ]
+      },
+      "rationale": "High-severity repeated input carrying SQL expression or database query manipulation indicators suggests automated SQL injection."
+    },
+    {
+      "name": "repeated_script_injection",
+      "technique": "T1190",
+      "condition": {
+        "mitreT1190": true,
+        "minRuleLevel": 10,
+        "minOccurrences": 8,
+        "requestIndicators": [
+          "script insertion markers",
+          "repeated input manipulation"
+        ]
+      },
+      "rationale": "Correlated script insertion markers across repeated web requests may signal cross-site scripting or injection probing."
+    },
+    {
+      "name": "repeated_path_or_command_injection",
+      "technique": "T1190",
+      "condition": {
+        "mitreT1190": true,
+        "minRuleLevel": 10,
+        "minOccurrences": 8,
+        "requestIndicators": [
+          "path traversal",
+          "command separator"
+        ]
+      },
+      "rationale": "Repeated parent-directory traversal or command separators in web parameters indicate attempted input exploitation."
+    },
+    {
+      "name": "single_ambiguous_request",
+      "technique": "T1190",
+      "condition": {
+        "mitreT1190": true,
+        "weakOrIsolatedEvidence": true
+      },
+      "rationale": "An isolated anomalous web input is suspicious but insufficient alone to authorize blocking."
+    }
+  ],
+  "guardrails": [
+    "Never block because a benign search contains 'SQL', 'select', 'script', or 'up'.",
+    "Use Wazuh rule.mitre array and data.count string as provided; do not infer repetitions from rule.firedtimes.",
+    "Require both severity and repeated suspicious web requests to block unless a trusted Wazuh correlation proves the attack.",
+    "Normal low-level events with no T1190 evidence must remain record.",
+    "No web request is executed, replayed against a target, or sent over a network.",
+    "Fixture thresholds are specific to the training scenario, not a production WAF policy."
+  ]
+}
