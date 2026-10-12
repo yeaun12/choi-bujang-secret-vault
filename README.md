@@ -207,3 +207,26 @@ npm run build -- --local
 수업용 경보 **28건**의 기대 분류는 `block 10 / alert 9 / record 9`입니다. 과거의 9건 합성 예제는 `npm run xdr:run -- brute-force --fixture xdr/fixtures/brute-force.demo.json`으로 개별 실행할 수 있습니다. 실제 공식 심판 판정이 아닌 로컬 검증입니다.
 
 **운영 연결 한계**: 기존 `src/decider.mjs` 요청 계약에는 신뢰 가능한 출발 IP가 없어 XDR 로컬 차단 규칙이 실제 ZTNA 접근 차단으로 이어지지 않습니다. 운영 측의 신뢰 IP 연계와 등록된 거부 응답 코드가 필요합니다. 경보 로그와 임시 거부 규칙은 `.gitignore`로 Git 추적에서 제외합니다.
+
+## 보너스 XDR-02: 웹 입력 조작 탐지
+
+`bonus-xdr-02-web-injection` 브랜치에 기존 XDR-01 및 방어전 1~5단계 코드를 보존하면서 웹 입력 조작 탐지를 추가했습니다.
+
+- `xdr/fixtures/web-injection.json`: 수업용 Wazuh 모양 경보 26건. 동일한 내용과 파일 해시를 가진 공개된 방어전 저장소 3곳에서 교차 확인해 가져왔으며 원본을 수정하지 않았습니다. **공식 심판의 비공개 정답표는 아닙니다.**
+- `xdr/web-injection/read-alerts.mjs`: 시각, 출발 주소, 요청 URL, 규칙 수준, 설명의 다섯 필드를 경보마다 추출합니다.
+- `xdr/web-injection/patterns.json`: MITRE ATT&CK T1190 관련 반복 SQL·스크립트 삽입·경로 이탈·명령 구분자와 단발성 의심 요청을 구분합니다.
+- `xdr/web-injection/decide.mjs`: 단일 경보를 독립적으로 판단해 `{action, confidence, reason}`을 반환합니다. 파일 읽기, 외부 연결, 다른 모듈 import는 없습니다.
+- `xdr/web-injection/respond.mjs`: block 후보에 임시 15분 만료와 경보 ID를 붙여 **로컬 거부 규칙**으로 저장하고, block/alert 경보를 `xdr/alerts.log`에 민감한 URL 원문 없이 줄별 기록합니다.
+- `scripts/xdr-run-web-injection.mjs`: `aleph.xdr.result.v1` 형식으로 이벤트별 `decisions`와 `counts`를 출력합니다.
+- `test/xdr-web-injection.test.mjs`: 26건 분류 및 오탐·만료·로그·규격 회귀 검증.
+
+```sh
+npm run xdr:test
+npm run xdr:run -- web-injection
+npm run test:r5
+npm run build -- --local
+```
+
+수업용 경보 26건에서 예상되는 분류는 `block 8 / alert 9 / record 9`입니다. 실제로 재실행하기 전에는 성공했다고 판단하지 않습니다. 이전 `npm run xdr:run -- brute-force`는 기존 구현을 그대로 사용합니다.
+
+**중요한 제약:** 이 응답 모듈은 실제 WAF·ZTNA와 연결되어 있지 않습니다. 기존 판정기에 신뢰 가능한 요청 출발 주소가 제공되지 않으므로, 차단 동작은 로컬 규칙과 만료 검증까지만 확인합니다. 수업용 고정 경보에서의 분류 결과는 실서비스의 실제 탐지 성능이나 공식 심판 통과를 증명하지 않습니다.
