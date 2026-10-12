@@ -63,7 +63,8 @@ export async function runBruteForce({ fixturePath, resultPath = DEFAULT_RESULT,
     });
   }
   const report = {
-    schema: 'aleph.xdr.brute-force.result.v1',
+    schema: 'aleph.xdr.result.v1',
+    moduleKey: 'brute-force',
     scenario: 'brute-force',
     fixtureKind,
     judgeVerified: false,
@@ -75,6 +76,12 @@ export async function runBruteForce({ fixturePath, resultPath = DEFAULT_RESULT,
     normalBlockedCount: labeledNormalCount ? normalBlockedCount : null,
     normalEventCheck: labeledNormalCount ? 'checked-labeled-events-only' : 'unverifiable-no-ground-truth',
     enforcement: 'local-staged-deny-rules-only; no live ZTNA IP contract',
+    decisions: outcomes.map((item, index) => ({
+      alertId: String(alerts[index]?.id ?? 'alert-' + (index + 1)),
+      action: item.action,
+      confidence: item.confidence,
+      reason: item.reason,
+    })),
     outcomes,
   };
   await mkdir(dirname(resultPath), { recursive: true });
@@ -91,7 +98,7 @@ async function cli() {
   const demo = resolve(ROOT, 'xdr/fixtures/brute-force.demo.json');
   const fixturePath = option === '--fixture' ? resolve(override) :
     await exists(provided) ? provided : demo;
-  const fixtureKind = resolve(fixturePath) === resolve(demo) ? 'synthetic' : 'provided-unverified';
+  const fixtureKind = resolve(fixturePath) === resolve(demo) ? 'synthetic' : 'course-shared-unverified';
   if (fixtureKind === 'synthetic') {
     console.log('NOTICE: official Wazuh fixture absent; using SYNTHETIC demonstration events only.');
   }
