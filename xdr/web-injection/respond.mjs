@@ -60,7 +60,7 @@ export async function respond(alert, judgment, options = {}) {
   const id = evidenceId(alert);
   const wantsBlock = decision.action === 'block' && confidence >= 0.85;
   const stagedBlock = Boolean(wantsBlock && ip && id);
-  const action = stagedBlock ? 'block' : decision.action === 'alert' || wantsBlock ? 'alert' : 'record';
+  const action = stagedBlock ? 'block' : decision.action === 'alert' || decision.action === 'block' ? 'alert' : 'record';
   const { log, rules } = paths(options);
   let expiresAt = null;
 
