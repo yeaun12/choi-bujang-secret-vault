@@ -8,3 +8,5 @@ supabase/seed.local.sql
 xdr/alerts.log
 xdr/brute-force/deny-rules.json
 xdr/brute-force/deny-rules.json.*.tmp
+xdr/web-injection/deny-rules.json
+xdr/web-injection/deny-rules.json.*.tmp

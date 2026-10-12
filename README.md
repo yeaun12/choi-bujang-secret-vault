@@ -187,13 +187,13 @@ git diff --check
 
 **확인된 1차 실패 원인**: 처음에는 공식 형태의 `xdr/fixtures/brute-force.json` 없이 9건짜리 합성 예제로만 작업했습니다. 그래서 `result.json`의 분류 건수가 심판 요구와 맞지 않았고, `decide(alert)`는 실제 수업용 경보의 `rule.mitre: ["T1110"]`, `data.count: "48"`, `data.accounts`, 한국어 공격·정상 설명을 처리하지 못했습니다.
 
-**시험 데이터 출처**: `xdr/fixtures/brute-force.json`은 이 과제의 공개 수강생 저장소 두 곳에서 *파일 해시가 동일한 수업용 가상 Wazuh 경보*를 확인하여 가져왔습니다. 28건 모두 문서용 주소·가상 계정을 사용합니다. 원본을 수정하지 않았지만, 심판의 비공개 정답표와 동일하다는 보장은 없습니다. `xdr/fixtures/brute-force.demo.json`은 기존 합성 9건 예제로 별도 유지합니다.
+**시험 데이터 출처**: `xdr/fixtures/brute-force.json`은 이후 공식 시작 틀 `ChoiTimo/aleph-defense-starter`의 원본과 파일 해시가 동일함을 확인했습니다. 28건 모두 문서용 주소·가상 계정을 사용합니다. 원본을 수정하지 않았지만, 심판의 비공개 정답표와 동일하다는 보장은 없습니다. `xdr/fixtures/brute-force.demo.json`은 기존 합성 9건 예제로 별도 유지합니다.
 
 - `read-alerts.mjs`: 필수 다섯 개 필드만 추출.
 - `patterns.json`: MITRE ATT&CK T1110.001 / T1110.003 및 공격 강도별 판단 근거.
 - `decide.mjs`: 단일 경보의 레벨, MITRE 태그, 실패 건수, 여러 계정 정황, 사건 설명을 이용해 독립 판단. **import/파일 I/O/외부 조회 없음**.
 - `respond.mjs`: 근거 경보 ID와 15분 만료를 가진 **로컬 임시** 차단 규칙을 기록하고 알림을 `xdr/alerts.log`에 줄별 저장.
-- `scripts/xdr-run.mjs`: `aleph.xdr.result.v1` 형식의 `decisions` 및 `counts` 출력. 결과에는 가상 경보 분류 내용만 기록.
+- `scripts/xdr-run.mjs`: 공식 시작 틀과 SHA가 같은 원본 실행기를 유지합니다. `aleph.xdr.result.v1` 형식의 `decisions` 및 `counts`만 출력합니다.
 
 **재현**
 
@@ -204,6 +204,34 @@ npm run test:r5
 npm run build -- --local
 ```
 
-수업용 경보 **28건**의 기대 분류는 `block 10 / alert 9 / record 9`입니다. 과거의 9건 합성 예제는 `npm run xdr:run -- brute-force --fixture xdr/fixtures/brute-force.demo.json`으로 개별 실행할 수 있습니다. 실제 공식 심판 판정이 아닌 로컬 검증입니다.
+수업용 경보 **28건**의 기대 분류는 `block 10 / alert 9 / record 9`입니다. 과거의 9건 합성 예제는 `npm run xdr:test`의 별도 테스트에서 계속 검증합니다. 공식 실행기는 `--fixture` 인자를 지원하지 않으므로 원본 경보 파일을 교체해 실행하지 않습니다. 실제 공식 심판 판정이 아닌 로컬 검증입니다.
 
 **운영 연결 한계**: 기존 `src/decider.mjs` 요청 계약에는 신뢰 가능한 출발 IP가 없어 XDR 로컬 차단 규칙이 실제 ZTNA 접근 차단으로 이어지지 않습니다. 운영 측의 신뢰 IP 연계와 등록된 거부 응답 코드가 필요합니다. 경보 로그와 임시 거부 규칙은 `.gitignore`로 Git 추적에서 제외합니다.
+
+## 보너스 XDR-02: 웹 입력 조작 탐지
+
+`bonus-xdr-02-web-injection` 브랜치에 기존 XDR-01 및 방어전 1~5단계 코드를 보존하면서 웹 입력 조작 탐지를 추가했습니다.
+
+- `xdr/fixtures/web-injection.json`: 공식 시작 틀의 수업용 Wazuh 경보 26건을 그대로 복원했습니다. 파일 SHA가 공식 원본과 일치합니다. **심판의 비공개 정답표는 아닙니다.**
+- `xdr/web-injection/read-alerts.mjs`: 시각, 출발 주소, 요청 URL, 규칙 수준, 설명의 다섯 필드를 경보마다 추출합니다.
+- `xdr/web-injection/patterns.json`: MITRE ATT&CK T1190 관련 반복 SQL·스크립트 삽입·경로 이탈·명령 구분자와 단발성 의심 요청을 구분합니다.
+- `xdr/web-injection/decide.mjs`: 단일 경보를 독립적으로 판단해 `{action, confidence, reason}`을 반환합니다. 파일 읽기, 외부 연결, 다른 모듈 import는 없습니다.
+- `xdr/web-injection/respond.mjs`: block 후보에 임시 15분 만료와 경보 ID를 붙여 **로컬 거부 규칙**으로 저장하고, block/alert 경보를 `xdr/alerts.log`에 민감한 URL 원문 없이 줄별 기록합니다.
+- `scripts/xdr-run.mjs`: XDR-01과 XDR-02에 공통으로 쓰는 **공식 시작 틀 원본 실행기**입니다. 모듈별 `decisions`와 `counts`를 생성합니다.
+- `scripts/xdr-run-web-injection.mjs`: 응답 규칙·로그 로컬 테스트용 보조 실행기이며 **공식 제출 실행기는 아닙니다.**
+- `test/xdr-web-injection.test.mjs`: 26건 분류 및 오탐·만료·로그·규격 회귀 검증.
+
+```sh
+npm run xdr:test
+npm run xdr:run -- web-injection
+npm run test:r5
+npm run build -- --local
+```
+
+수업용 경보 26건에서 예상되는 분류는 `block 8 / alert 9 / record 9`입니다. 실제로 재실행하기 전에는 성공했다고 판단하지 않습니다. 이전 `npm run xdr:run -- brute-force`는 기존 구현을 그대로 사용합니다.
+
+**중요한 제약:** 이 응답 모듈은 실제 WAF·ZTNA와 연결되어 있지 않습니다. 기존 판정기에 신뢰 가능한 요청 출발 주소가 제공되지 않으므로, 차단 동작은 로컬 규칙과 만료 검증까지만 확인합니다. 수업용 고정 경보에서의 분류 결과는 실서비스의 실제 탐지 성능이나 공식 심판 통과를 증명하지 않습니다.
+
+### 공식 시작 틀 누락 복원 (2026-10-12)
+
+강사 안내에 따라 원본 `xdr/README.md`의 **심판 격리 환경에서 지킬 것**, `scripts/xdr-run.mjs`를 공식 시작 틀과 동일한 내용으로 복원했습니다. `xdr/fixtures/`의 여섯 파일도 원본과 SHA가 모두 같습니다. 1차 보너스 XDR-01의 `decide.mjs`, `patterns.json`, `result.json` 및 기존 1~5단계 기능은 수정하지 않았습니다. 남은 보너스의 격리 심판은 각 `decide.mjs` 한 파일만 로드하므로 import·파일 접근·네트워크 호출 없이 경보마다 독립적으로 판단합니다. 패키징 단계의 `package/`와 `api/` 관련 원본 파일은 그 단계에 도달한 뒤 검토하며 지금은 복원하지 않습니다.

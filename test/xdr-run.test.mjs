@@ -1,52 +1,57 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { runBruteForce } from '../scripts/xdr-run.mjs';
+import { join } from 'node:path';
+import { runXdr } from '../scripts/xdr-run.mjs';
 
-async function sandbox(fn) {
-  const dir = await mkdtemp(join(tmpdir(), 'xdr-run-'));
-  try { await fn(dir); } finally { await rm(dir, { recursive: true, force: true }); }
+const script = new URL('../xdr/brute-force/decide.mjs', import.meta.url);
+const demo = new URL('../xdr/fixtures/brute-force.demo.json', import.meta.url);
+
+async function isolatedFixture(alerts, exercise) {
+  const root = await mkdtemp(join(tmpdir(), 'official-xdr-'));
+  try {
+    await mkdir(join(root, 'xdr/fixtures'), { recursive: true });
+    await mkdir(join(root, 'xdr/brute-force'), { recursive: true });
+    await copyFile(script, join(root, 'xdr/brute-force/decide.mjs'));
+    await writeFile(join(root, 'xdr/fixtures/brute-force.json'),
+      JSON.stringify({ schema: 'aleph.xdr.fixture.v1', moduleKey: 'brute-force', alerts }));
+    return await exercise(root);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 }
 
-test('synthetic replay yields separate block/alert/record counts and no normal blocks', async () => sandbox(async dir => {
-  const resultPath = join(dir, 'result.json');
-  const report = await runBruteForce({
-    fixturePath: resolve('xdr/fixtures/brute-force.demo.json'),
-    fixtureKind: 'synthetic',
-    resultPath,
-    stateDir: dir,
-    now: '2026-10-12T03:00:00Z',
+test('official runner classifies original synthetic exercises without changing them', async () => {
+  const doc = JSON.parse(await readFile(demo, 'utf8'));
+  await isolatedFixture(doc.alerts, async root => {
+    const report = await runXdr({ root, moduleKey: 'brute-force' });
+    assert.equal(report.schema, 'aleph.xdr.result.v1');
+    assert.equal(report.moduleKey, 'brute-force');
+    assert.deepEqual(report.counts, { block: 3, alert: 2, record: 4 });
+    assert.equal(report.decisions.length, 9);
+    assert.ok(report.decisions.every(v =>
+      Object.keys(v).join(',') === 'alertId,action,confidence,reason'));
+    assert.equal(report.decisions[0].alertId, 'demo.001');
+    const saved = JSON.parse(await readFile(join(root, 'xdr/brute-force/result.json'), 'utf8'));
+    assert.deepEqual(saved, report);
+    assert.doesNotMatch(JSON.stringify(report), /SECRET_DO_NOT_LOG|demo-user/);
   });
-  assert.equal(report.total, 9);
-  assert.equal(report.extractedCount, 9);
-  assert.deepEqual(report.counts, { block: 3, alert: 2, record: 4 });
-  assert.deepEqual(report.responseCounts, { block: 3, alert: 2, record: 4 });
-  assert.equal(report.labeledNormalCount, 4);
-  assert.equal(report.normalBlockedCount, 0);
-  assert.equal(report.judgeVerified, false);
-  const json = JSON.parse(await readFile(resultPath, 'utf8'));
-  assert.deepEqual(json.counts, report.counts);
-  assert.equal(json.outcomes.length, json.total);
-  assert.ok(!JSON.stringify(json).includes('demo-user'));
-  const alertLog = await readFile(join(dir, 'alerts.log'), 'utf8');
-  assert.equal(alertLog.trim().split('\n').length, 5);
-  const denyList = JSON.parse(await readFile(join(dir, 'brute-force/deny-rules.json'), 'utf8'));
-  assert.equal(denyList.rules.length, 3);
-}));
+});
 
-test('without ground truth, normal event check is honestly unverifiable', async () => sandbox(async dir => {
-  const fixturePath = join(dir, 'supplied.json');
-  await writeFile(fixturePath, JSON.stringify([{
-    id: 'external.1',
-    rule: { description: 'successful login' },
-    data: { srcip: '192.0.2.20' },
-  }]));
-  const report = await runBruteForce({
-    fixturePath, resultPath: join(dir, 'result.json'), stateDir: dir, fixtureKind: 'provided-unverified',
+test('official runner safely downgrades invalid judge output to record', async () => {
+  const alerts = [{ id: 'test-invalid', rule: { level: 8 }, data: { srcip: '192.0.2.70' } }];
+  await isolatedFixture(alerts, async root => {
+    await writeFile(join(root, 'xdr/brute-force/decide.mjs'),
+      'export function decide() { return {action: "block", confidence: 999, reason: null}; }\n');
+    const errors = [];
+    const report = await runXdr({ root, moduleKey: 'brute-force', writeError: line => errors.push(line) });
+    assert.deepEqual(report.counts, { block: 0, alert: 0, record: 1 });
+    assert.deepEqual(report.decisions, [{
+      alertId: 'test-invalid', action: 'record',
+      confidence: 0, reason: '반환 형식이 아닙니다',
+    }]);
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /test-invalid/);
   });
-  assert.deepEqual(report.counts, { block: 0, alert: 0, record: 1 });
-  assert.equal(report.normalBlockedCount, null);
-  assert.equal(report.normalEventCheck, 'unverifiable-no-ground-truth');
-}));
+});

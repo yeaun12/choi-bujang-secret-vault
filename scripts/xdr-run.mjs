@@ -1,124 +1,70 @@
-// Local XDR-01 replay runner. It does not replace the official ALEPH judge.
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { decide } from '../xdr/brute-force/decide.mjs';
-import { projectAlerts } from '../xdr/brute-force/read-alerts.mjs';
-import { respond } from '../xdr/brute-force/respond.mjs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const ROOT = resolve(import.meta.dirname, '..');
-const DEFAULT_RESULT = resolve(ROOT, 'xdr/brute-force/result.json');
+const MODULE_KEYS = ['brute-force', 'web-injection', 'known-cve', 'persistence', 'privilege', 'exfiltration'];
+const ACTIONS = new Set(['block', 'alert', 'record']);
 
-async function exists(path) {
-  try { await access(path); return true; }
-  catch (error) {
-    if (error?.code === 'ENOENT') return false;
-    throw error;
+export function isDecision(value) {
+  return Boolean(value)
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && ACTIONS.has(value.action)
+    && typeof value.confidence === 'number'
+    && Number.isFinite(value.confidence)
+    && value.confidence >= 0
+    && value.confidence <= 1
+    && typeof value.reason === 'string';
+}
+
+export async function runXdr({ root, moduleKey, writeError = (line) => console.error(line) }) {
+  if (!MODULE_KEYS.includes(moduleKey)) {
+    throw new Error('moduleKey 가 없습니다. brute-force, web-injection, known-cve, persistence, privilege, exfiltration 중 하나를 넣습니다.');
   }
-}
+  const fixture = JSON.parse(await readFile(join(root, 'xdr', 'fixtures', `${moduleKey}.json`), 'utf8'));
+  if (fixture?.schema !== 'aleph.xdr.fixture.v1' || fixture.moduleKey !== moduleKey || !Array.isArray(fixture.alerts)) {
+    throw new Error('경보 묶음 형식이 아닙니다.');
+  }
+  const loaded = await import(pathToFileURL(join(root, 'xdr', moduleKey, 'decide.mjs')).href);
+  if (typeof loaded.decide !== 'function') throw new Error('decide 함수를 내보내지 않았습니다.');
 
-function extractAlerts(doc) {
-  if (Array.isArray(doc)) return doc;
-  if (Array.isArray(doc?.alerts)) return doc.alerts;
-  if (Array.isArray(doc?.data?.alerts)) return doc.data.alerts;
-  throw new TypeError('Expected a JSON alert array (or an alerts array in an object)');
-}
-
-export async function runBruteForce({ fixturePath, resultPath = DEFAULT_RESULT,
-  stateDir = resolve(ROOT, 'xdr'), fixtureKind = 'provided-unverified', now } = {}) {
-  if (!fixturePath) throw new TypeError('fixturePath required');
-  const fixture = JSON.parse(await readFile(fixturePath, 'utf8'));
-  const alerts = extractAlerts(fixture);
-  const projected = projectAlerts(fixture);
-  if (projected.length !== alerts.length) throw new Error('Alert extraction count mismatch');
-
+  const decisions = [];
   const counts = { block: 0, alert: 0, record: 0 };
-  const responseCounts = { block: 0, alert: 0, record: 0 };
-  const outcomes = [];
-  let labeledNormalCount = 0;
-  let normalBlockedCount = 0;
-  for (const [index, alert] of alerts.entries()) {
-    const judgment = decide(alert);
-    if (!Object.hasOwn(counts, judgment?.action)) throw new Error('Invalid XDR decision action');
-    if (typeof judgment.confidence !== 'number' || !Number.isFinite(judgment.confidence) ||
-        judgment.confidence < 0 || judgment.confidence > 1) {
-      throw new Error('Invalid XDR decision confidence');
+  for (const alert of fixture.alerts) {
+    const alertId = alert && typeof alert.id === 'string' ? alert.id : '';
+    let action = 'record';
+    let confidence = 0;
+    let reason = '반환 형식이 아닙니다';
+    try {
+      const out = await loaded.decide(alert);
+      if (isDecision(out)) {
+        action = out.action;
+        confidence = out.confidence;
+        reason = out.reason;
+      } else {
+        writeError(`형식 오류: ${alertId || '(id 없음)'}`);
+      }
+    } catch {
+      writeError(`형식 오류: ${alertId || '(id 없음)'}`);
     }
-    counts[judgment.action] += 1;
-    const response = await respond(alert, judgment, { stateDir, ...(now === undefined ? {} : { now }) });
-    if (!Object.hasOwn(responseCounts, response.action)) throw new Error('Invalid XDR response action');
-    responseCounts[response.action] += 1;
-    const truth = alert?.groundTruth === 'normal' ? 'normal'
-      : alert?.groundTruth === 'attack' ? 'attack'
-      : alert?.groundTruth === 'ambiguous' ? 'ambiguous' : null;
-    if (truth === 'normal') {
-      labeledNormalCount++;
-      if (judgment.action === 'block' || response.action === 'block') normalBlockedCount++;
-    }
-    // Store no account, raw alert, IP address, password, or token in result.json.
-    outcomes.push({
-      index: index + 1, action: judgment.action, responseAction: response.action,
-      confidence: judgment.confidence, reason: judgment.reason,
-      ...(truth ? { groundTruth: truth } : {}),
-    });
+    decisions.push({ alertId, action, confidence, reason });
+    counts[action] += 1;
   }
-  const report = {
-    schema: 'aleph.xdr.result.v1',
-    moduleKey: 'brute-force',
-    scenario: 'brute-force',
-    fixtureKind,
-    judgeVerified: false,
-    total: alerts.length,
-    extractedCount: projected.length,
-    counts,
-    responseCounts,
-    labeledNormalCount,
-    normalBlockedCount: labeledNormalCount ? normalBlockedCount : null,
-    normalEventCheck: labeledNormalCount ? 'checked-labeled-events-only' : 'unverifiable-no-ground-truth',
-    enforcement: 'local-staged-deny-rules-only; no live ZTNA IP contract',
-    decisions: outcomes.map((item, index) => ({
-      alertId: String(alerts[index]?.id ?? 'alert-' + (index + 1)),
-      action: item.action,
-      confidence: item.confidence,
-      reason: item.reason,
-    })),
-    outcomes,
-  };
-  await mkdir(dirname(resultPath), { recursive: true });
-  await writeFile(resultPath, JSON.stringify(report, null, 2) + '\n', 'utf8');
-  return report;
+
+  const result = { schema: 'aleph.xdr.result.v1', moduleKey, decisions, counts };
+  const outDir = join(root, 'xdr', moduleKey);
+  await mkdir(outDir, { recursive: true });
+  await writeFile(join(outDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  return result;
 }
 
-async function cli() {
-  const [scenario, option, override] = process.argv.slice(2);
-  if (scenario !== 'brute-force' || (option && (option !== '--fixture' || !override))) {
-    throw new Error('Usage: npm run xdr:run -- brute-force [--fixture path/to/alerts.json]');
-  }
-  const provided = resolve(ROOT, 'xdr/fixtures/brute-force.json');
-  const demo = resolve(ROOT, 'xdr/fixtures/brute-force.demo.json');
-  const fixturePath = option === '--fixture' ? resolve(override) :
-    await exists(provided) ? provided : demo;
-  const fixtureKind = resolve(fixturePath) === resolve(demo) ? 'synthetic' : 'course-shared-unverified';
-  if (fixtureKind === 'synthetic') {
-    console.log('NOTICE: official Wazuh fixture absent; using SYNTHETIC demonstration events only.');
-  }
-  const report = await runBruteForce({ fixturePath, fixtureKind });
-  console.log('fixture=' + fixtureKind + ' total=' + report.total +
-    ' extracted=' + report.extractedCount);
-  console.log('block=' + report.counts.block + ' alert=' + report.counts.alert +
-    ' record=' + report.counts.record);
-  console.log('effective-block=' + report.responseCounts.block +
-    ' effective-alert=' + report.responseCounts.alert +
-    ' effective-record=' + report.responseCounts.record);
-  console.log('normalBlocked=' + (report.normalBlockedCount ?? 'unverifiable') +
-    ' judgeVerified=false (local replay only)');
-  console.log('result=' + DEFAULT_RESULT);
-  if (report.normalBlockedCount > 0) process.exitCode = 1;
-}
-
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  cli().catch(error => {
-    console.error('XDR replay failed: ' + (error?.message ?? 'unknown error'));
+const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+if (isMain) {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  try {
+    await runXdr({ root, moduleKey: process.argv[2] });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : '실행 오류');
     process.exitCode = 1;
-  });
+  }
 }
