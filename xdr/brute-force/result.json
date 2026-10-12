@@ -1,96 +1,391 @@
 {
-  "schema": "aleph.xdr.brute-force.result.v1",
+  "schema": "aleph.xdr.result.v1",
+  "moduleKey": "brute-force",
   "scenario": "brute-force",
-  "fixtureKind": "synthetic",
+  "fixtureKind": "course-shared-unverified",
   "judgeVerified": false,
-  "total": 9,
-  "extractedCount": 9,
+  "total": 28,
+  "extractedCount": 28,
   "counts": {
-    "block": 3,
-    "alert": 2,
-    "record": 4
+    "block": 10,
+    "alert": 9,
+    "record": 9
   },
   "responseCounts": {
-    "block": 3,
-    "alert": 2,
-    "record": 4
+    "block": 10,
+    "alert": 9,
+    "record": 9
   },
-  "labeledNormalCount": 4,
-  "normalBlockedCount": 0,
-  "normalEventCheck": "checked-labeled-events-only",
+  "labeledNormalCount": 0,
+  "normalBlockedCount": null,
+  "normalEventCheck": "unverifiable-no-ground-truth",
   "enforcement": "local-staged-deny-rules-only; no live ZTNA IP contract",
+  "decisions": [
+    {
+      "alertId": "bf-01",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
+    },
+    {
+      "alertId": "bf-02",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "multi_account_password_spraying"
+    },
+    {
+      "alertId": "bf-03",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "multi_account_password_spraying"
+    },
+    {
+      "alertId": "bf-04",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
+    },
+    {
+      "alertId": "bf-05",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "multi_account_password_spraying"
+    },
+    {
+      "alertId": "bf-06",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
+    },
+    {
+      "alertId": "bf-07",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
+    },
+    {
+      "alertId": "bf-08",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
+    },
+    {
+      "alertId": "bf-09",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "multi_account_password_spraying"
+    },
+    {
+      "alertId": "bf-10",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
+    },
+    {
+      "alertId": "bf-11",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "alertId": "bf-12",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "alertId": "bf-13",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "alertId": "bf-14",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "alertId": "bf-15",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "alertId": "bf-16",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "alertId": "bf-17",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "alertId": "bf-18",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "alertId": "bf-19",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "alertId": "bf-20",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "alertId": "bf-21",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "alertId": "bf-22",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "alertId": "bf-23",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "alertId": "bf-24",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "alertId": "bf-25",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "alertId": "bf-26",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "alertId": "bf-27",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "alertId": "bf-28",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    }
+  ],
   "outcomes": [
     {
       "index": 1,
       "action": "block",
       "responseAction": "block",
-      "confidence": 0.97,
-      "reason": "wazuh_correlated_ssh_brute_force",
-      "groundTruth": "attack"
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
     },
     {
       "index": 2,
       "action": "block",
       "responseAction": "block",
-      "confidence": 0.9,
-      "reason": "repeated_failures_same_source_and_account",
-      "groundTruth": "attack"
+      "confidence": 0.95,
+      "reason": "multi_account_password_spraying"
     },
     {
       "index": 3,
       "action": "block",
       "responseAction": "block",
-      "confidence": 0.9,
-      "reason": "failures_across_multiple_accounts",
-      "groundTruth": "attack"
+      "confidence": 0.95,
+      "reason": "multi_account_password_spraying"
     },
     {
       "index": 4,
-      "action": "alert",
-      "responseAction": "alert",
-      "confidence": 0.7,
-      "reason": "failures_across_multiple_accounts",
-      "groundTruth": "ambiguous"
+      "action": "block",
+      "responseAction": "block",
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
     },
     {
       "index": 5,
-      "action": "alert",
-      "responseAction": "alert",
-      "confidence": 0.7,
-      "reason": "repeated_failures_same_source_and_account",
-      "groundTruth": "ambiguous"
+      "action": "block",
+      "responseAction": "block",
+      "confidence": 0.95,
+      "reason": "multi_account_password_spraying"
     },
     {
       "index": 6,
-      "action": "record",
-      "responseAction": "record",
-      "confidence": 0.1,
-      "reason": "no_matching_pattern",
-      "groundTruth": "normal"
+      "action": "block",
+      "responseAction": "block",
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
     },
     {
       "index": 7,
-      "action": "record",
-      "responseAction": "record",
-      "confidence": 0.05,
-      "reason": "no_matching_pattern",
-      "groundTruth": "normal"
+      "action": "block",
+      "responseAction": "block",
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
     },
     {
       "index": 8,
-      "action": "record",
-      "responseAction": "record",
-      "confidence": 0.1,
-      "reason": "no_matching_pattern",
-      "groundTruth": "normal"
+      "action": "block",
+      "responseAction": "block",
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
     },
     {
       "index": 9,
+      "action": "block",
+      "responseAction": "block",
+      "confidence": 0.95,
+      "reason": "multi_account_password_spraying"
+    },
+    {
+      "index": 10,
+      "action": "block",
+      "responseAction": "block",
+      "confidence": 0.95,
+      "reason": "high_volume_password_guessing"
+    },
+    {
+      "index": 11,
+      "action": "alert",
+      "responseAction": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "index": 12,
+      "action": "alert",
+      "responseAction": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "index": 13,
+      "action": "alert",
+      "responseAction": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "index": 14,
+      "action": "alert",
+      "responseAction": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "index": 15,
+      "action": "alert",
+      "responseAction": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "index": 16,
+      "action": "alert",
+      "responseAction": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "index": 17,
+      "action": "alert",
+      "responseAction": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "index": 18,
+      "action": "alert",
+      "responseAction": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "index": 19,
+      "action": "alert",
+      "responseAction": "alert",
+      "confidence": 0.65,
+      "reason": "low_volume_suspicious_logins"
+    },
+    {
+      "index": 20,
       "action": "record",
       "responseAction": "record",
-      "confidence": 0.1,
-      "reason": "no_matching_pattern",
-      "groundTruth": "normal"
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "index": 21,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "index": 22,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "index": 23,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "index": 24,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "index": 25,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "index": 26,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "index": 27,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
+    },
+    {
+      "index": 28,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern"
     }
   ]
 }

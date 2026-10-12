@@ -10,45 +10,53 @@
       "name": "wazuh_correlated_ssh_brute_force",
       "technique": "T1110.001",
       "condition": {
-        "kind": "confirmed_wazuh_correlation",
+        "kind": "wazuh_correlation",
         "ruleId": "5712",
-        "requireSourceAddress": true,
-        "documentedRuleMeaning": "Wazuh SSH correlation: eight failed logins from one source IP in two minutes",
-        "note": "Confirm the official rule identity; do not replace correlated evidence with rule.firedtimes or rule.level."
+        "requireSourceAddress": true
       },
-      "rationale": "Wazuh documents rule 5712 for eight failed SSH logins from one IP within two minutes; repetitive password guessing matches MITRE T1110.001."
+      "rationale": "Wazuh rule 5712 correlates eight failed SSH logins from the same source within two minutes."
     },
     {
-      "name": "repeated_failures_same_source_and_account",
+      "name": "high_volume_password_guessing",
       "technique": "T1110.001",
       "condition": {
-        "kind": "single_alert_aggregated_failures",
+        "kind": "wazuh_alert_volume",
         "requireSourceAddress": true,
-        "requireSameAccount": true,
-        "requireFailureCount": true,
-        "requireBoundedTimeWindow": true,
-        "note": "A single Wazuh alert must itself contain verified aggregation evidence; without it this pattern is not confirmed."
+        "requireMitreT1110": true,
+        "minRuleLevel": 9,
+        "minFailedAttempts": 15
       },
-      "rationale": "Repeated authentication failures concentrated on one account within a bounded interval indicate potential password guessing under MITRE T1110.001."
+      "rationale": "High-severity T1110 alert with at least 15 failed attempts is a clear repeated-password guessing indicator in the supplied training fixture."
     },
     {
-      "name": "failures_across_multiple_accounts",
+      "name": "multi_account_password_spraying",
       "technique": "T1110.003",
       "condition": {
-        "kind": "single_alert_aggregated_failures",
+        "kind": "wazuh_multi_account",
         "requireSourceAddress": true,
-        "requireMultipleDistinctAccounts": true,
-        "requireFailureCount": true,
-        "requireBoundedTimeWindow": true,
-        "note": "This is a password-spraying indicator, not proof the same password was reused; never inspect or log credentials."
+        "requireMitreT1110": true,
+        "minRuleLevel": 9,
+        "minDistinctAccounts": 5,
+        "requireRepeatedOrSprayingEvidence": true
       },
-      "rationale": "Authentication failures from one source against many accounts in a short interval can indicate password spraying under MITRE T1110.003."
+      "rationale": "A correlated high-severity alert showing repeated attempts across at least five distinct accounts indicates a spraying pattern without inspecting password values."
+    },
+    {
+      "name": "low_volume_suspicious_logins",
+      "technique": "T1110",
+      "condition": {
+        "kind": "weak_wazuh_login_signal",
+        "mitreT1110OrRepeatedFailures": true,
+        "requireNonRoutineEvidence": true
+      },
+      "rationale": "Limited failed login attempts or contextual abnormalities warrant an alert, not an automatic block."
     }
   ],
   "guardrails": [
-    "No credential values are stored, compared, or printed.",
-    "rule.firedtimes alone is not the number of failures by the same source within a bounded interval.",
-    "Without evidence of an actual time window, source correlation, and failed attempts, do not treat a high rule level as confirmed brute force.",
-    "Any unverified aggregation field names or quantitative thresholds must be checked against the supplied Wazuh fixture before enforcing blocks."
+    "The supplied lesson fixture uses rule.mitre as an array and data.count as a numeric string; never infer a count from rule.firedtimes.",
+    "Do not inspect or compare raw password values. A description mentioning password spraying is treated only as indicator metadata.",
+    "Routine low-severity success, logout and session events are record even if they contain normal account or IP fields.",
+    "Use a high severity AND attack evidence gate for blocks; a single failed authentication is not a block.",
+    "These thresholds are for the provided 28-event training fixture, not a general production security policy."
   ]
 }
