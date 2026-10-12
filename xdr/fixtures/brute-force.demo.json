@@ -1,0 +1,157 @@
+{
+  "schema": "aleph.xdr.synthetic-fixture.v1",
+  "note": "Synthetic and non-official events for local validation only. No real accounts, addresses, or secrets.",
+  "alerts": [
+    {
+      "id": "demo.001",
+      "timestamp": "2026-10-12T00:00:00Z",
+      "rule": {
+        "id": "5712",
+        "level": 10,
+        "description": "SSH multiple authentication failures from same source IP"
+      },
+      "data": {
+        "srcip": "198.51.100.10",
+        "dstuser": "demo-user"
+      },
+      "groundTruth": "attack"
+    },
+    {
+      "id": "demo.002",
+      "timestamp": "2026-10-12T00:01:00Z",
+      "rule": {
+        "id": "99901",
+        "level": 9,
+        "description": "Aggregated failed login attempts"
+      },
+      "data": {
+        "srcip": "203.0.113.10",
+        "dstuser": "demo-user"
+      },
+      "aggregation": {
+        "sameSourceIp": true,
+        "sameAccount": true,
+        "failedAttempts": 9,
+        "windowSeconds": 100
+      },
+      "groundTruth": "attack"
+    },
+    {
+      "id": "demo.003",
+      "timestamp": "2026-10-12T00:02:00Z",
+      "rule": {
+        "id": "99902",
+        "level": 8,
+        "description": "Multiple account authentication failures"
+      },
+      "data": {
+        "srcip": "203.0.113.11"
+      },
+      "aggregation": {
+        "sameSourceIp": true,
+        "failedAttempts": 15,
+        "windowSeconds": 100,
+        "distinctAccounts": 5
+      },
+      "groundTruth": "attack"
+    },
+    {
+      "id": "demo.004",
+      "timestamp": "2026-10-12T00:03:00Z",
+      "rule": {
+        "id": "99903",
+        "level": 6,
+        "description": "Suspicious authentication failure pattern"
+      },
+      "data": {
+        "srcip": "198.51.100.11"
+      },
+      "aggregation": {
+        "sameSourceIp": true,
+        "failedAttempts": 6,
+        "windowSeconds": 240,
+        "distinctAccounts": 3
+      },
+      "groundTruth": "ambiguous"
+    },
+    {
+      "id": "demo.005",
+      "timestamp": "2026-10-12T00:04:00Z",
+      "rule": {
+        "id": "99904",
+        "level": 7,
+        "description": "SSH brute force attack",
+        "mitre": {
+          "id": [
+            "T1110"
+          ]
+        }
+      },
+      "data": {
+        "srcip": "198.51.100.12"
+      },
+      "groundTruth": "ambiguous"
+    },
+    {
+      "id": "demo.006",
+      "timestamp": "2026-10-12T00:05:00Z",
+      "rule": {
+        "id": "5710",
+        "level": 4,
+        "description": "sshd: Failed password",
+        "firedtimes": 2
+      },
+      "data": {
+        "srcip": "192.0.2.10",
+        "dstuser": "demo-user"
+      },
+      "groundTruth": "normal"
+    },
+    {
+      "id": "demo.007",
+      "timestamp": "2026-10-12T00:06:00Z",
+      "rule": {
+        "id": "5715",
+        "level": 3,
+        "description": "Accepted password; successful login"
+      },
+      "data": {
+        "srcip": "192.0.2.11",
+        "dstuser": "demo-user"
+      },
+      "groundTruth": "normal"
+    },
+    {
+      "id": "demo.008",
+      "timestamp": "2026-10-12T00:07:00Z",
+      "rule": {
+        "id": "5710",
+        "level": 12,
+        "description": "Single event with elevated rule firing counter",
+        "firedtimes": 900
+      },
+      "data": {
+        "srcip": "192.0.2.12"
+      },
+      "groundTruth": "normal"
+    },
+    {
+      "id": "demo.009",
+      "timestamp": "2026-10-12T00:08:00Z",
+      "rule": {
+        "id": "99905",
+        "level": 10,
+        "description": "Unverified summary without same-source evidence"
+      },
+      "data": {
+        "srcip": "192.0.2.13"
+      },
+      "aggregation": {
+        "failedAttempts": 15,
+        "windowSeconds": 100,
+        "distinctAccounts": 5
+      },
+      "groundTruth": "normal"
+    }
+  ]
+}
