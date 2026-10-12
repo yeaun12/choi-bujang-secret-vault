@@ -5,3 +5,6 @@ bundle-notes.json
 node_modules/
 public/aleph.json
 supabase/seed.local.sql
+xdr/alerts.log
+xdr/brute-force/deny-rules.json
+xdr/brute-force/deny-rules.json.*.tmp
