@@ -1,0 +1,54 @@
+{
+  "schema": "aleph.xdr.brute-force.patterns.v1",
+  "references": [
+    "https://attack.mitre.org/techniques/T1110/001/",
+    "https://attack.mitre.org/techniques/T1110/003/",
+    "https://documentation.wazuh.com/current/user-manual/ruleset/testing.html"
+  ],
+  "patterns": [
+    {
+      "name": "wazuh_correlated_ssh_brute_force",
+      "technique": "T1110.001",
+      "condition": {
+        "kind": "confirmed_wazuh_correlation",
+        "ruleId": "5712",
+        "requireSourceAddress": true,
+        "documentedRuleMeaning": "Wazuh SSH correlation: eight failed logins from one source IP in two minutes",
+        "note": "Confirm the official rule identity; do not replace correlated evidence with rule.firedtimes or rule.level."
+      },
+      "rationale": "Wazuh documents rule 5712 for eight failed SSH logins from one IP within two minutes; repetitive password guessing matches MITRE T1110.001."
+    },
+    {
+      "name": "repeated_failures_same_source_and_account",
+      "technique": "T1110.001",
+      "condition": {
+        "kind": "single_alert_aggregated_failures",
+        "requireSourceAddress": true,
+        "requireSameAccount": true,
+        "requireFailureCount": true,
+        "requireBoundedTimeWindow": true,
+        "note": "A single Wazuh alert must itself contain verified aggregation evidence; without it this pattern is not confirmed."
+      },
+      "rationale": "Repeated authentication failures concentrated on one account within a bounded interval indicate potential password guessing under MITRE T1110.001."
+    },
+    {
+      "name": "failures_across_multiple_accounts",
+      "technique": "T1110.003",
+      "condition": {
+        "kind": "single_alert_aggregated_failures",
+        "requireSourceAddress": true,
+        "requireMultipleDistinctAccounts": true,
+        "requireFailureCount": true,
+        "requireBoundedTimeWindow": true,
+        "note": "This is a password-spraying indicator, not proof the same password was reused; never inspect or log credentials."
+      },
+      "rationale": "Authentication failures from one source against many accounts in a short interval can indicate password spraying under MITRE T1110.003."
+    }
+  ],
+  "guardrails": [
+    "No credential values are stored, compared, or printed.",
+    "rule.firedtimes alone is not the number of failures by the same source within a bounded interval.",
+    "Without evidence of an actual time window, source correlation, and failed attempts, do not treat a high rule level as confirmed brute force.",
+    "Any unverified aggregation field names or quantitative thresholds must be checked against the supplied Wazuh fixture before enforcing blocks."
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "schema": "aleph.xdr.brute-force.result.v1",
+  "scenario": "brute-force",
+  "fixtureKind": "synthetic",
+  "judgeVerified": false,
+  "total": 9,
+  "extractedCount": 9,
+  "counts": {
+    "block": 3,
+    "alert": 2,
+    "record": 4
+  },
+  "responseCounts": {
+    "block": 3,
+    "alert": 2,
+    "record": 4
+  },
+  "labeledNormalCount": 4,
+  "normalBlockedCount": 0,
+  "normalEventCheck": "checked-labeled-events-only",
+  "enforcement": "local-staged-deny-rules-only; no live ZTNA IP contract",
+  "outcomes": [
+    {
+      "index": 1,
+      "action": "block",
+      "responseAction": "block",
+      "confidence": 0.97,
+      "reason": "wazuh_correlated_ssh_brute_force",
+      "groundTruth": "attack"
+    },
+    {
+      "index": 2,
+      "action": "block",
+      "responseAction": "block",
+      "confidence": 0.9,
+      "reason": "repeated_failures_same_source_and_account",
+      "groundTruth": "attack"
+    },
+    {
+      "index": 3,
+      "action": "block",
+      "responseAction": "block",
+      "confidence": 0.9,
+      "reason": "failures_across_multiple_accounts",
+      "groundTruth": "attack"
+    },
+    {
+      "index": 4,
+      "action": "alert",
+      "responseAction": "alert",
+      "confidence": 0.7,
+      "reason": "failures_across_multiple_accounts",
+      "groundTruth": "ambiguous"
+    },
+    {
+      "index": 5,
+      "action": "alert",
+      "responseAction": "alert",
+      "confidence": 0.7,
+      "reason": "repeated_failures_same_source_and_account",
+      "groundTruth": "ambiguous"
+    },
+    {
+      "index": 6,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.1,
+      "reason": "no_matching_pattern",
+      "groundTruth": "normal"
+    },
+    {
+      "index": 7,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.05,
+      "reason": "no_matching_pattern",
+      "groundTruth": "normal"
+    },
+    {
+      "index": 8,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.1,
+      "reason": "no_matching_pattern",
+      "groundTruth": "normal"
+    },
+    {
+      "index": 9,
+      "action": "record",
+      "responseAction": "record",
+      "confidence": 0.1,
+      "reason": "no_matching_pattern",
+      "groundTruth": "normal"
+    }
+  ]
+}

@@ -180,3 +180,26 @@ git diff --check
 ```
 
 `npm run test:r5`는 6개 테스트가 모두 통과했고, 로컬 빌드도 정상 완료되었습니다.
+
+## 보너스 XDR-01: 무차별 로그인 공격 탐지 (별도 브랜치)
+
+`bonus-xdr-01` 브랜치에는 기존 1~5단계의 서버와 판정기 코드를 변경하지 않고, Wazuh 로그인 경보 분석 부품을 추가했습니다.
+
+- `xdr/brute-force/read-alerts.mjs`: 경보에서 시각, 출발 IP, 계정, 규칙 수준, 설명만 추출합니다. 원본 경보는 변경하지 않습니다.
+- `xdr/brute-force/patterns.json`: MITRE ATT&CK T1110.001 및 T1110.003 근거의 세 가지 패턴을 기록합니다.
+- `xdr/brute-force/decide.mjs`: 각 경보 한 건을 독립적으로 판단해 `{action, confidence, reason}`을 반환합니다. 다른 모듈을 import하거나 파일을 읽고 쓰지 않습니다.
+- `xdr/brute-force/respond.mjs`: 차단 후보에 경보 ID, 임시 만료 시각을 부여하고 로그를 기록합니다. 현재 생성되는 거부 규칙은 **로컬 모의 차단 규칙**이며 실제 ZTNA 접근 제어로 연결되어 있지 않습니다.
+- `scripts/xdr-run.mjs`: 입력 경보를 재생하고 `xdr/brute-force/result.json`에 판단 결과와 분류 집계를 기록합니다.
+
+로컬 재현 명령:
+
+```sh
+npm run xdr:test
+npm run xdr:run -- brute-force
+npm run test:r5
+npm run build -- --local
+```
+
+보너스 시험 원본 `xdr/fixtures/brute-force.json`은 이 저장소에 제공되지 않았습니다. 위 실행 명령은 공식 원본이 없으면 **합성 예제** `xdr/fixtures/brute-force.demo.json` 9건을 사용하며 이를 콘솔과 결과 파일에 `fixtureKind: "synthetic"`, `judgeVerified: false`로 표시합니다. 2026-10-12에 학생 로컬 환경에서 XDR 회귀 테스트 23건 통과, 합성 경보는 block 3 / alert 2 / record 4, 정상으로 표시된 4건의 차단 0건을 확인했습니다. 이는 공식 심판 결과 또는 실제 운영 오탐률을 의미하지 않습니다.
+
+`src/decider.mjs`의 현재 SDP 요청 계약에는 신뢰할 수 있는 출발 IP가 없습니다. 공식 연결 계약이 제공되기 전까지 로컬 차단 규칙은 실제 접속 차단에 사용하지 않습니다. `xdr/alerts.log`와 `xdr/brute-force/deny-rules.json`은 Git 추적에서 제외합니다. `result.json`에는 가상 이벤트의 집계와 판단 근거만 남깁니다.
