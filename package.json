@@ -10,7 +10,7 @@
     "detect:test": "node scripts/detect-test.mjs",
     "fixture:7": "node scripts/fixture-7.mjs",
     "xdr:run": "node scripts/xdr-run.mjs",
-    "xdr:test": "node --test test/xdr-*.test.mjs"
+    "xdr:test": "node --test test/xdr-read-alerts.test.mjs test/xdr-decide.test.mjs test/xdr-respond.test.mjs test/xdr-run.test.mjs"
   },
   "engines": {
     "node": ">=22"
