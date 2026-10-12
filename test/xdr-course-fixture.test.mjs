@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { decide } from '../xdr/brute-force/decide.mjs';
-import { runBruteForce } from '../scripts/xdr-run.mjs';
+import { runXdr } from '../scripts/xdr-run.mjs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -34,28 +34,25 @@ test('all 28 course examples classify as high-risk, uncertain, or routine', () =
 });
 
 test('all 28 alerts yield an official-shaped result document', async () => {
-  const stateDir = await mkdtemp(join(tmpdir(), 'course-xdr-'));
+  const root = await mkdtemp(join(tmpdir(), 'course-xdr-'));
   try {
-    const report = await runBruteForce({
-      fixturePath: resolve('xdr/fixtures/brute-force.json'),
-      resultPath: join(stateDir, 'result.json'),
-      stateDir,
-      fixtureKind: 'course-shared-unverified',
-      now: '2026-10-12T03:00:00.000Z',
-    });
+    await mkdir(join(root, 'xdr/fixtures'), { recursive: true });
+    await mkdir(join(root, 'xdr/brute-force'), { recursive: true });
+    await writeFile(join(root, 'xdr/fixtures/brute-force.json'), JSON.stringify(course));
+    await copyFile(new URL('../xdr/brute-force/decide.mjs', import.meta.url),
+      join(root, 'xdr/brute-force/decide.mjs'));
+    const report = await runXdr({ root, moduleKey: 'brute-force' });
     assert.equal(report.schema, 'aleph.xdr.result.v1');
     assert.equal(report.moduleKey, 'brute-force');
     assert.deepEqual(report.counts, { block: 10, alert: 9, record: 9 });
-    assert.equal(report.total, 28);
     assert.equal(report.decisions.length, 28);
     assert.equal(report.decisions[0].alertId, 'bf-01');
     assert.equal(report.decisions[27].alertId, 'bf-28');
-    assert.deepEqual(report.responseCounts, { block: 10, alert: 9, record: 9 });
-    assert.equal(report.judgeVerified, false);
-    // No labels in the source means no verified false-positive rate for real deployments.
-    assert.equal(report.normalBlockedCount, null);
+    assert.deepEqual(Object.keys(report), ['schema', 'moduleKey', 'decisions', 'counts']);
+    const saved = JSON.parse(await readFile(join(root, 'xdr/brute-force/result.json'), 'utf8'));
+    assert.deepEqual(saved, report);
   } finally {
-    await rm(stateDir, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true });
   }
 });
 
