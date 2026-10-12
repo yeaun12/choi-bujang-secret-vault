@@ -3,6 +3,7 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decide } from '../xdr/brute-force/decide.mjs';
+import { runWebInjection } from './xdr-run-web-injection.mjs';
 import { projectAlerts } from '../xdr/brute-force/read-alerts.mjs';
 import { respond } from '../xdr/brute-force/respond.mjs';
 
@@ -91,6 +92,26 @@ export async function runBruteForce({ fixturePath, resultPath = DEFAULT_RESULT,
 
 async function cli() {
   const [scenario, option, override] = process.argv.slice(2);
+  if (scenario === 'web-injection') {
+    if (option && (option !== '--fixture' || !override))
+      throw new Error('Usage: npm run xdr:run -- web-injection [--fixture path/to/alerts.json]');
+    const fixturePath = option === '--fixture' ? resolve(override)
+      : resolve(ROOT, 'xdr/fixtures/web-injection.json');
+    const fixtureKind = option === '--fixture' ? 'provided-unverified' : 'course-shared-unverified';
+    const report = await runWebInjection({ fixturePath, fixtureKind });
+    console.log('moduleKey=web-injection fixture=' + fixtureKind +
+      ' total=' + report.total + ' extracted=' + report.extractedCount);
+    console.log('block=' + report.counts.block + ' alert=' + report.counts.alert +
+      ' record=' + report.counts.record);
+    console.log('effective-block=' + report.responseCounts.block +
+      ' effective-alert=' + report.responseCounts.alert +
+      ' effective-record=' + report.responseCounts.record);
+    console.log('normalBlocked=' + (report.normalBlockedCount ?? 'unverifiable') +
+      ' judgeVerified=false (local replay only)');
+    console.log('result=' + resolve(ROOT, 'xdr/web-injection/result.json'));
+    if (report.normalBlockedCount > 0) process.exitCode = 1;
+    return;
+  }
   if (scenario !== 'brute-force' || (option && (option !== '--fixture' || !override))) {
     throw new Error('Usage: npm run xdr:run -- brute-force [--fixture path/to/alerts.json]');
   }
