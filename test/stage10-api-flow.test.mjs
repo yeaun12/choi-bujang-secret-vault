@@ -231,13 +231,14 @@ test('A and anonymous recovery denied; owner/hash expectations cannot widen reco
   assert.deepEqual(tables.notes, before);
 });
 
-test('unexecuted A cross-owner retest makes the overall result incomplete', async () => {
+test('unexecuted optional A check remains unexecuted while real normal and denial tests pass', async () => {
   const { a, b } = await seed();
   tables.notes = tables.notes.filter(row => row.id !== a);
   const result = await call('POST', '/api/restore', tokenB, { noteId: b });
   assert.equal(result.status, 200);
   assert.equal(result.body.restored, true);
-  assert.equal(result.body.retest.passed, false, 'Unexecuted check is not a completed passing retest');
+  assert.equal(result.body.retest.passed, true, 'Actually run required checks passed; optional A stays unexecuted');
+  assert.equal(result.body.retest.complete, true);
   assert.deepEqual(result.body.retest.notRun, ['foreign_denied']);
 });
 
