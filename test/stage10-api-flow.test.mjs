@@ -240,6 +240,11 @@ test('unexecuted optional A check remains unexecuted while real normal and denia
   assert.equal(result.body.retest.passed, true, 'Actually run required checks passed; optional A stays unexecuted');
   assert.equal(result.body.retest.complete, true);
   assert.deepEqual(result.body.retest.notRun, ['foreign_denied']);
+  assert.equal(result.body.retest.executed, 3);
+  assert.equal(result.body.retest.passedCount, 3);
+  assert.equal(result.body.retest.failedCount, 0);
+  assert.equal(result.body.retests.length, 3);
+  assert.ok(result.body.retests.every(x => Number.isInteger(x.status)));
 });
 
 test('empty POST selects exactly one damaged B snapshot and restores it', async () => {
