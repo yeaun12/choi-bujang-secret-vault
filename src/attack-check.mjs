@@ -284,6 +284,10 @@ export async function runAttackChecks(config) {
         ? `Anonymous note restore was denied with JSON (HTTP ${restoreResponse.status}).`
         : `Anonymous note restore denial failed (HTTP ${restoreResponse.status}).`,
     });
+    // Record freshly executed local recovery checks separately from the
+    // deployed anonymous checks. Their labels disclose test storage/JWKS.
+    const { runStage10SelfChecks } = await import('./stage10-self-check.mjs');
+    checks.push(...await runStage10SelfChecks());
   }
 
   return checks;

@@ -409,7 +409,7 @@ test('stage 10 self-check uses real anonymous HTTP evidence for recovery denial'
       });
     };
     const attempts = await runAttackChecks({ ...baseConfig, step: 10 });
-    assert.equal(attempts.length, 7);
+    assert.equal(attempts.length, 12);
     assert.deepEqual(requests.map(([path, method]) => [path, method]), [
       ['/data.json', 'GET'],
       ['/api/notes', 'GET'],
@@ -421,8 +421,9 @@ test('stage 10 self-check uses real anonymous HTTP evidence for recovery denial'
     ]);
     assert.ok(requests.every(([, , auth]) =>
       auth === null || auth === 'Bearer bad.token.value'));
-    assert.ok(attempts.every(item => /HTTP (401|404)/u.test(item.observed)));
-    assert.equal(attempts.at(-1).attackId, 'anonymous_note_restore_denied');
+    assert.ok(attempts.slice(0, 7).every(item => /HTTP (401|404)/u.test(item.observed)));
+    assert.equal(attempts[6].attackId, 'anonymous_note_restore_denied');
+    assert.ok(attempts.slice(7).every(item => item.observed.startsWith('PASS:')));
   } finally {
     globalThis.fetch = originalFetch;
   }
