@@ -15,6 +15,7 @@ const identityA = { ...identityB, identity: 'a' };
 const originalContent = 'Synthetic original B fixture';
 const tables = { notes: [], stage10_note_backups: [], stage10_restore_audit: [] };
 let backupReads = 0, server, baseUrl, tokenA, tokenB;
+const backupReadsByNote = new Map();
 const oldUrl = process.env.SUPABASE_URL;
 const oldKey = process.env.SUPABASE_SECRET_KEY;
 
@@ -51,6 +52,10 @@ const database = { from(table) {
       return { data: single ? project(value) : [project(value)], error: null };
     }
     const rows = tables[table].filter(row => filters.every(filter => filter(row))).slice(0, limit);
+    if (table === 'stage10_note_backups' && operation === 'select') {
+      for (const row of rows) backupReadsByNote.set(row.note_id,
+        (backupReadsByNote.get(row.note_id) ?? 0) + 1);
+    }
     if (operation === 'update') {
       assert.equal(table, 'notes', 'Backups/audits must remain immutable');
       rows.forEach(row => Object.assign(row, fields));
@@ -122,7 +127,7 @@ async function call(method, path, token = tokenB, body) {
   });
   return { status: response.status, body: await response.json() };
 }
-function reset() { for (const table of Object.keys(tables)) tables[table] = []; backupReads = 0; }
+function reset() { for (const table of Object.keys(tables)) tables[table] = []; backupReads = 0; backupReadsByNote.clear(); }
 async function seed() {
   reset();
   const a = randomUUID(), b = randomUUID(), other = randomUUID();
@@ -165,6 +170,14 @@ test('full API flow: signed creation, immutable backup, mutation, preview, exact
   assert.equal((await call('GET', '/api/notes/' + a, tokenA)).status, 200);
   assert.equal((await call('GET', '/api/notes/' + a, tokenB)).status, 404);
   assert.equal((await call('GET', '/api/notes/' + other, tokenB)).status, 200);
+  const reloadedBackup = tables.stage10_note_backups.find(note => note.note_id === b);
+  assert.ok(backupReadsByNote.get(b) >= 2);
+  t.diagnostic('STAGE10_BACKUP_PROOF ' + JSON.stringify({
+    scope: 'local_synthetic', id: reloadedBackup.note_id, ownerId: reloadedBackup.owner_id,
+    version: reloadedBackup.captured_at, snapshotReads: backupReadsByNote.get(b),
+    storedSha256: reloadedBackup.content_sha256, recomputedSha256: sha256(reloadedBackup.content),
+    previewChanges: preview.body.changes,
+  }));
   t.diagnostic('STAGE10_TUPLE_PROOF ' + JSON.stringify({
     scenario: 'tampered', scope: 'local_synthetic',
     backup: { id: backup.note_id, ownerId: backup.owner_id, contentSha256: backup.content_sha256 },

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { runStage10SelfChecks, readTupleProofs } from '../src/stage10-self-check.mjs';
+import { runStage10SelfChecks, readTupleProofs, readBackupProof } from '../src/stage10-self-check.mjs';
 
 test('fresh recovery self-check runs the HTTP flow and isolated policy without changing deployed policy', async () => {
   const before = readFileSync(new URL('../src/decider.mjs', import.meta.url), 'utf8');
@@ -20,6 +20,24 @@ test('fresh recovery self-check runs the HTTP flow and isolated policy without c
   const measured = /id=([a-f0-9-]{36}); owner=([a-f0-9-]{36}); sha256=([a-f0-9]{64})/u;
   assert.deepEqual(recovered.expected.match(measured)?.slice(1), recovered.observed.match(measured)?.slice(1));
   assert.ok(recovered.expected.match(measured));
+  const noteBackup = outcomes.find(row => row.attackId === 'stage10_local_backup_readback');
+  assert.match(noteBackup.observed, /snapshot reads=\d+; version=/u);
+  assert.match(noteBackup.observed, /stored SHA256=recomputed [a-f0-9]{64}/u);
+});
+
+test('note-backup verification rejects missing readback, changed digest, absent version or duplicated evidence', () => {
+  const valid = { scope: 'local_synthetic', id: '123e4567-e89b-42d3-a456-426614174002',
+    ownerId: '123e4567-e89b-42d3-a456-426614174001', version: '2026-10-13T00:00:00.000Z',
+    snapshotReads: 2, storedSha256: 'a'.repeat(64), recomputedSha256: 'a'.repeat(64),
+    previewChanges: ['title', 'content'] };
+  const encode = value => '# STAGE10_BACKUP_PROOF ' + JSON.stringify(value);
+  assert.deepEqual(readBackupProof(encode(valid)), valid);
+  assert.equal(readBackupProof(''), null);
+  assert.equal(readBackupProof(encode(valid) + '\n' + encode(valid)), null);
+  for (const wrong of [{ snapshotReads: 1 }, { recomputedSha256: 'b'.repeat(64) },
+    { version: null }, { ownerId: 'invalid' }, { previewChanges: [] }]) {
+    assert.equal(readBackupProof(encode({ ...valid, ...wrong })), null);
+  }
 });
 
 test('tuple evidence rejects missing, duplicate, owner/hash/response mismatch or invalid records', () => {

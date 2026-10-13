@@ -36,6 +36,21 @@ export function readTupleProofs(output) {
   return tuples;
 }
 
+export function readBackupProof(output) {
+  const lines = output.split('\n').map(line => /^\s*# STAGE10_BACKUP_PROOF (.+)$/u.exec(line)).filter(Boolean);
+  if (lines.length !== 1) return null;
+  let proof;
+  try { proof = JSON.parse(lines[0][1]); } catch { return null; }
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+  if (proof?.scope !== 'local_synthetic' || !uuid.test(proof.id ?? '') || !uuid.test(proof.ownerId ?? '')
+      || !Number.isSafeInteger(proof.snapshotReads) || proof.snapshotReads < 2
+      || typeof proof.version !== 'string' || !Number.isFinite(Date.parse(proof.version))
+      || !/^[a-f0-9]{64}$/u.test(proof.storedSha256 ?? '')
+      || proof.storedSha256 !== proof.recomputedSha256
+      || !Array.isArray(proof.previewChanges) || !proof.previewChanges.includes('content')) return null;
+  return proof;
+}
+
 export async function runStage10SelfChecks() {
   const checks = [];
   let policyVerified = false;
@@ -94,12 +109,18 @@ export async function runStage10SelfChecks() {
   const deleted = passed('deleted B note recreated from its original backup, retaining other notes and audit');
   const incomplete = passed('unexecuted A cross-owner retest makes the overall result incomplete');
   const proofs = readTupleProofs(output);
+  const backupProof = readBackupProof(output);
   const tamperedProof = proofs?.find(row => row.scenario === 'tampered');
+  const backupBound = backupProof && tamperedProof && backupProof.id === tamperedProof.backup.id
+    && backupProof.ownerId === tamperedProof.backup.ownerId
+    && backupProof.storedSha256 === tamperedProof.backup.contentSha256;
   const tuple = row => 'id=' + row.id + '; owner=' + row.ownerId + '; sha256=' + row.contentSha256;
   const groups = [
-    ['stage10_local_backup_readback', full && missing,
+    ['stage10_local_backup_readback', full && missing && backupBound,
       'Re-read the stored synthetic B snapshot; missing/corrupt backups must abort before writes.',
-      'Backup readback and missing/corrupt rejection verified.'],
+      backupProof ? 'snapshot reads=' + backupProof.snapshotReads + '; version=' + backupProof.version
+        + '; stored SHA256=recomputed ' + backupProof.storedSha256
+        + '; preview=title/content; missing/corrupt abort.' : 'Missing measured note-backup verification.'],
     ['stage10_local_postrestore_retests', full && incomplete,
       'Execute normal and forbidden requests after local recovery; an unexecuted A check must keep overall passed=false.',
       'Normal 200/hash match; anonymous 401, query 400, cross-owner 404; missing A remains unexecuted.'],
