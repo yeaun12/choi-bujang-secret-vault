@@ -237,7 +237,46 @@ test('stage 6 self-check retains HTTP evidence, not invented device checks', asy
   }
 });
 
+test('deployment identity supports stage 7 without changing metadata', () => {
+  const config = {
+    ...baseConfig,
+    step: 7,
+    originalApiUrl: 'https://student-project.supabase.co/rest/v1/notes',
+  };
+  const identity = deploymentIdentity(env, config);
+  assert.equal(identity.step, 7);
+  assert.equal(identity.schema, 'aleph.defense.deployment.v1');
+  assert.equal(identity.judgeIssuer, config.judgeIssuer);
+  assert.deepEqual(identity.allowedRoutes, config.allowedRoutes);
+  assert.equal(identity.originalApiUrl, config.originalApiUrl);
+});
+
+test('stage 7 self-check retains actual HTTP evidence, not simulated re-login evidence', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  try {
+    globalThis.fetch = async (url, init = {}) => {
+      const pathname = new URL(url).pathname;
+      requests.push([pathname, init.method ?? 'GET']);
+      if (pathname === '/data.json') return new Response('Not Found', { status: 404 });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    const results = await runAttackChecks({ ...baseConfig, step: 7 });
+    assert.deepEqual(requests, [
+      ['/data.json', 'GET'], ['/api/notes', 'GET'],
+      ['/api/notes', 'POST'], ['/api/notes', 'GET'],
+    ]);
+    assert.equal(results.length, 4);
+    assert.ok(results.every((item) => /HTTP (401|404)/u.test(item.observed)));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('deployment identity rejects unsupported stages', () => {
-  const config = { ...baseConfig, step: 7 };
+  const config = { ...baseConfig, step: 8 };
   assert.throws(() => deploymentIdentity(env, config));
 });
