@@ -39,7 +39,9 @@ const SHA256 = /^[a-f0-9]{64}$/u;
 // Accept one optional target note and optional preview/expectation fields.
 // Unknown keys never widen the scope: only ONE named note can be restored.
 export function parseRestoreBody(body) {
-  if (body === null || body === undefined) return { noteId: null, preview: false };
+  if (body === null || body === undefined) return {
+    noteId: null, preview: false, expectedSha256: null, expectedOwnerId: null,
+  };
   if (typeof body !== 'object' || Array.isArray(body)) return null;
   const named = NOTE_ID_KEYS.filter(key => body[key] !== undefined && body[key] !== null);
   const ids = [...new Set(named.map(key => body[key]))];
@@ -57,10 +59,10 @@ export function parseRestoreBody(body) {
   };
 }
 
-// The signed B subject is the owner the caller knows; the derived storage
-// partition is reported separately so both can be compared to the snapshot.
+// Owner evidence must retain the exact storage value that was verified.
+// The token subject is separate metadata, never a substitute for backup.ownerId.
 function publicBackup(backup, owner) {
-  return { ...backup, ownerId: owner.subject, storageOwnerId: backup.ownerId };
+  return { ...backup, subjectId: owner.subject, storageOwnerId: backup.ownerId };
 }
 
 function ownerMatches(expected, identity, storageOwnerId) {
@@ -112,7 +114,7 @@ export async function POST(request) {
     if (input.preview) {
       trace('preview', 'ok', 200);
       return json({ preview: true, restored: false, id: plan.noteId, noteId: plan.noteId,
-        ownerId: owner.subject, owner, backup: publicBackup(plan.backup, owner),
+        ownerId: plan.ownerId, owner, backup: publicBackup(plan.backup, owner),
         version: plan.backup.version, changes: plan.changedFields,
         currentSha256: plan.beforeSha256 });
     }
@@ -139,7 +141,7 @@ export async function POST(request) {
     };
     return json({
       restored: true, id: result.noteId, noteId: result.noteId,
-      ownerId: owner.subject, owner,
+      ownerId: result.ownerId, owner,
       contentSha256: result.contentSha256, mode: result.mode,
       version: result.backup.version, changes: result.changedFields,
       previousSha256: result.beforeSha256,
@@ -148,6 +150,7 @@ export async function POST(request) {
       scope: { restoredNotes: 1, otherNotesTouched: 0, auditPreserved: true },
       retest: {
         passed: retest.passed,
+        complete: retest.complete,
         normal: retest.results.filter(x => x.kind === 'normal'),
         forbidden: retest.results.filter(x => x.kind === 'forbidden'),
         notRun: retest.results.filter(x => x.result.startsWith('not_run'))

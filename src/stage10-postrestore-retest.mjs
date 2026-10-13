@@ -125,5 +125,6 @@ export async function runPostRestoreHttpRetests({
       request: RETEST_REQUEST.foreign_denied, expected: RETEST_EXPECTED.foreign_denied,
       status: null, result: 'not_run_no_verified_a_note' });
   }
-  return { passed: results.every(x => x.result !== 'failed'), results };
+  const complete = results.every(x => !x.result.startsWith('not_run'));
+  return { passed: complete && results.every(x => x.result === 'passed'), complete, results };
 }

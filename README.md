@@ -486,7 +486,7 @@ git status --short
 
 - `POST /api/restore` 본문: `{"noteId":"<UUID>"}` (별칭 `id`·`note_id`·`memoId`). 서로 다른 ID 두 개는 거부합니다. 미리보기는 `{"noteId":"…","dryRun":true}`이며 메모를 바꾸지 않고 **사본 버전(`version`)과 바뀔 항목(`changes`)**만 보여 줍니다. `contentSha256`·`ownerId`를 함께 보내면 사본과 다를 때 409로 멈춥니다. ID를 생략하면 이번 실행의 검증된 B 사본 가운데 **현재와 다른 메모가 정확히 한 건**일 때만 그 한 건을 대상으로 하고, 아니면 400입니다.
 - 실행 순서: 사본 두 번 다시 읽기·해시 검증(미리보기) → 소유자 확인 → 복원 직전 사본 재확인 → 한 건만 수정/재생성 → DB 행 재조회로 ID·소유자·본문 SHA-256 대조 → 감사 기록. 사본 없음(404)·검증 실패(409)이면 복원하지 않습니다.
-- 응답: `restored`, `id`, `ownerId`(서명된 B 주체), `owner.storageOwnerId`, `contentSha256`, `version`, `changes`, `backup{verified, rereadBeforeWrite, version, noteId, ownerId, contentSha256}`, `match{id, ownerId, contentSha256, all}`, `retest{passed, normal[], forbidden[], notRun[]}`.
+- 응답: `restored`, `id`, `ownerId`(**백업·DB와 동일한 저장 소유자**), `owner.subject`(서명된 B 주체), `owner.storageOwnerId`, `contentSha256`, `version`, `changes`, `backup{verified, rereadBeforeWrite, version, noteId, ownerId, contentSha256}`, `match{id, ownerId, contentSha256, all}`, `retest{passed, complete, normal[], forbidden[], notRun[]}`. `backup.ownerId`를 토큰 주체로 바꾸지 않습니다.
 - 복구 뒤 재시험은 배포된 `GET /api/notes/:id` 처리기를 같은 함수 안에서 실제로 호출합니다(정상 B 읽기 200·해시 일치, 비로그인 401, 쿼리 우회 400, B의 A 메모 404). A 메모가 없으면 `notRun`에 남기고 결과를 지어내지 않습니다. 재시험이 실패해도 복원 사실은 숨기지 않고 `retest.passed=false`로 보고합니다.
 - Vercel 함수 로그에는 `stage10_restore` 단계·이유 코드·상태만 남깁니다(토큰·본문 없음).
 - 로컬 확인: `node --test test/stage10-restore-api.test.mjs test/stage10-recovery.test.mjs test/stage10-postrestore-retest.test.mjs` (합성 가상 B 메모). 실제 심판 B의 변조→복구는 **미실행**이며 재제출 판정으로만 확인합니다.
@@ -497,3 +497,19 @@ git status --short
 - 확인된 결함: `scripts/deployment-identity.mjs`가 `aleph.config.json.restoreRoute`를 배포의 `public/aleph.json`에 전달하지 않았습니다. 10단계에만 `/api/restore`를 전달하고, 설정과 `POST /api/restore` 허용 경로가 맞지 않으면 빌드를 중단합니다. 앞 단계의 배포 정보와 DB 자료·정책은 변경하지 않습니다.
 - 검증: `node --test test/r5.test.mjs test/stage10-*.test.mjs`. 빌드 때 생성한 `public/aleph.json`의 `restoreRoute`가 `/api/restore`인지 확인합니다. 이 검증은 공식 B 토큰을 사용한 실제 복구 성공이나 심판 통과를 뜻하지 않습니다.
 - 재제출 주소: `https://choi-bujang-secret-vault-blush.vercel.app/`. 새 커밋 배포가 READY인 것을 확인한 뒤 제출합니다. 판정 뒤 DB 백업·감사 기록과 반환 상태를 다시 확인해야 합니다.
+
+### 10단계 저장점: API 통합 시험에서 재현된 결함 수정
+
+`3094ffb`도 같은 세 조건으로 실패했습니다. 아래 변경은 추정한 심판 응답 필드를 추가한 것이 아니라, 기존 API의 실제 불일치를 로컬 통합 시험으로 재현해 수정한 것입니다.
+
+| 재현한 결함 | 수정 뒤 동작 |
+|---|---|
+| 복구 응답의 소유자가 검증한 백업 소유자와 다름 | 응답 `ownerId`와 `backup.ownerId`는 실제 DB 소유자와 같음; 토큰 주체는 `owner.subject`로 별도 표시 |
+| A 메모가 없어 교차 접근 시험을 하지 못해도 전체 `passed=true` | `notRun`을 남기고 `complete=false`, `passed=false`; 복구 성공 사실과 시험 완료 여부를 구분 |
+| 본문 없는 POST에서 선택 항목이 undefined여서 409 거부 | 선택 항목을 null로 통일; 해당 실행의 변경된 B 메모가 정확히 한 건일 때만 복구 |
+
+**재현 명령:** `npm run test:stage10` (Node.js 22 이상). **실행 결과:** 54개 통과. 새 통합 시험은 수정 전 6개 중 4개가 실패했고 수정 뒤 6개 모두 통과했습니다.
+
+통합 시험(`test/stage10-api-flow.test.mjs`)은 임시 로컬 HTTP 서버에 기존 API 처리기를 연결합니다. 매 실행 생성한 ES256 키로 합성 A/B 토큰을 서명하고 기존 인증 검증기로 확인합니다. 시험 메모 생성 → 최초 사본 INSERT·재조회 → B 메모 변조/삭제 → 읽기 전용 미리보기 → 한 건 복원 → 저장된 ID·소유자·본문 해시와 응답 대조 → 정상 B 조회/익명 거부/쿼리 거부/B의 A 조회 거부를 수행합니다. 다른 메모·사본·기존 감사 이력도 대조합니다. 사본 누락·손상과 잘못된 소유자·해시·A/익명 복구 거부를 별도로 확인합니다.
+
+**시험 범위:** 인증 검증과 API 처리기는 실제 저장소 코드이며, DB와 심판 공개키 조회는 시험 대체 구현입니다. 공식 B 토큰·실제 운영 DB·Vercel 네트워크 경로를 검증한 결과가 아닙니다. 공식 재판정은 별도이며 미실행 항목을 성공으로 기록하지 않습니다. DB/정책 마이그레이션은 없습니다.

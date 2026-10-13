@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:stage10": "node --experimental-test-module-mocks --test test/r5.test.mjs test/stage10-*.test.mjs",
     "build": "node scripts/build-public.mjs",
     "test:r5": "node --test test/r5.test.mjs",
     "bundle": "node scripts/bundle.mjs",
