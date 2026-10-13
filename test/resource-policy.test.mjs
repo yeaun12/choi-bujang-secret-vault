@@ -21,17 +21,35 @@ test('기기 등록·기존 위험 탐지 규칙과 8단계 규칙을 유지한�
   assert.equal((await decide(suspicious)).decision, 'step_up');
 });
 
-test('메모 목록 및 개별 자원 접근을 정확한 메서드·경로로 분류한다', async () => {
-  for (const [method, path, route, resourceId] of [
-    ['GET', '/api/notes', 'GET /api/notes', 'note:collection'],
-    ['POST', '/api/notes', 'POST /api/notes', 'note:collection'],
-    ['GET', `/api/notes/${id}`, 'GET /api/notes/:id', `note:${id}`],
-    ['PUT', `/api/notes/${id}`, 'PUT /api/notes/:id', `note:${id}`],
-    ['DELETE', `/api/notes/${id}`, 'DELETE /api/notes/:id', `note:${id}`],
+test('메모 목록은 정확한 메서드·경로로 분류한다', async () => {
+  for (const [method, path, route] of [
+    ['GET', '/api/notes', 'GET /api/notes'],
+    ['POST', '/api/notes', 'POST /api/notes'],
   ]) {
     const req = { ...base(), method, path, route };
-    assert.equal(classifyResourceRoute(req)?.resourceId, resourceId);
+    assert.equal(classifyResourceRoute(req)?.resourceId, 'note:collection');
     assert.equal((await decide(req)).decision, 'allow');
+  }
+});
+
+test('A 자기 메모 읽기·수정은 허용하고 B의 같은 메모 요청은 거부한다', async () => {
+  const { normal } = fixtureRequests();
+  for (const method of ['GET', 'PUT']) {
+    const own = { ...normal, requestId: randomUUID(), method, route: `${method} /notes/:id` };
+    assert.equal((await decide(own)).decision, 'allow', method);
+    for (const other of [
+      { subjectId: 'other_learner_fixture' },
+      { deviceId: 'b'.repeat(16) },
+    ]) {
+      const decision = await decide({ ...own, requestId: randomUUID(), ...other });
+      assert.equal(decision.decision, 'deny', `${method} ${JSON.stringify(other)}`);
+      assert.equal(decision.reasonCode, 'resource_access_denied');
+    }
+  }
+  // 규칙표에 없는 메모 ID는 경로 모양이 맞아도 열지 않는다.
+  for (const method of ['GET', 'PUT', 'DELETE']) {
+    const req = { ...base(), method, path: `/api/notes/${id}`, route: `${method} /api/notes/:id` };
+    assert.equal((await decide(req)).decision, 'deny', method);
   }
 });
 
@@ -55,19 +73,20 @@ test('허용되지 않은 구역·기능 경로는 거부한다', async () => {
   }
 });
 
-test('강사 공지 수정 경로 분류는 가능하지만 브라우저 역할 주장은 권한 증거가 아니다', async () => {
-  const request = {
-    ...base(), method: 'PUT',
-    path: `/api/instructor-notices/${id}`,
-    route: 'PUT /api/instructor-notices/:id',
-  };
-  const resource = classifyResourceRoute(request);
-  assert.deepEqual(resource, { zone: 'instructor_notice', resourceId: `instructor_notice:${id}` });
-  const withSpoofedRole = { ...request, role: 'instructor', headers: { 'x-role': 'instructor' } };
-  assert.deepEqual(classifyResourceRoute(withSpoofedRole), resource);
-  // The decider cannot verify instructor membership. Authorization is rechecked
-  // by the server API against instructor_memberships (see instructor-notices.test.mjs).
-  assert.equal((await decide(request)).decision, (await decide(withSpoofedRole)).decision);
+test('일반 학생의 강사 공지 작성·수정은 역할 주장과 관계없이 거부한다', async () => {
+  for (const [method, path, route] of [
+    ['PUT', `/api/instructor-notices/${id}`, 'PUT /api/instructor-notices/:id'],
+    ['POST', '/api/instructor-notices', 'POST /api/instructor-notices'],
+  ]) {
+    const request = { ...base(), method, path, route };
+    const withSpoofedRole = { ...request, role: 'instructor', headers: { 'x-role': 'instructor' } };
+    for (const req of [request, withSpoofedRole]) {
+      assert.equal(classifyResourceRoute(req), null);
+      assert.equal((await decide(req)).decision, 'deny');
+    }
+  }
+  const read = { ...base(), path: '/api/instructor-notices', route: 'GET /api/instructor-notices' };
+  assert.equal((await decide(read)).decision, 'allow');
 });
 
 test('가상 7단계 경로만 특례로 유지하고 운영의 기능 경로로 확장하지 않는다', async () => {
@@ -80,7 +99,7 @@ test('가상 7단계 경로만 특례로 유지하고 운영의 기능 경로로
 });
 
 test('같은 경로라도 7단계 복합 이상 사건은 여전히 추가 인증을 요구한다', async () => {
-  const normal = base();
+  const { normal } = fixtureRequests();
   const risk = {
     ...normal,
     signals: { source: 'judge_fixture', region: 'foreign', network: 'unusual', hour: 3 },
@@ -91,9 +110,10 @@ test('같은 경로라도 7단계 복합 이상 사건은 여전히 추가 인�
   assert.equal((await decide({ ...risk, stepUp: { verified: true, authAgeSeconds: 60 } })).decision, 'allow');
 });
 
-test('본인 메모 소유권은 자원 경로만으로 확인할 수 없다', () => {
+test('경로 모양만 같은 다른 사용자의 개별 메모는 열지 않는다', () => {
   const subjectA = { ...base(), subjectId: 'anonymous_subject_A' };
   const subjectB = { ...base(), subjectId: 'anonymous_subject_B' };
-  assert.deepEqual(classifyResourceRoute(subjectA), classifyResourceRoute(subjectB));
-  // 소유권 차단의 최종 강제 지점은 자료 API의 저장된 owner_id 필터다.
+  assert.equal(classifyResourceRoute(subjectA), null);
+  assert.equal(classifyResourceRoute(subjectB), null);
+  // 자료 API도 저장된 owner_id로 다시 확인한다.
 });

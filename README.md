@@ -332,7 +332,7 @@ npm run bundle
 
 - 메모 API는 검증된 로그인 주체의 `userId`와 DB의 `notes.owner_id`를 함께 확인합니다. 목록·개별 조회·수정·삭제에서 타인 소유 메모는 노출하지 않고, 개별 요청은 `404`로 응답합니다. 브라우저에서 전달한 사용자 ID나 역할 선언은 사용하지 않습니다.
 - 강사 공지는 `/api/instructor-notices`(목록 GET, 작성 POST)와 `/api/instructor-notices/:id`(조회 GET, 수정 PUT)로 구별됩니다. 서버가 로그인 토큰을 검증한 후 DB의 `instructor_memberships`를 다시 확인하여 일반 사용자의 작성·수정을 `403`으로 차단합니다. 강사 공지 조회는 로그인 사용자에게 허용합니다.
-- `src/decider.mjs`의 `resource_scope`는 요청 계약에 포함된 **메서드·경로·자원 구역**만 판정합니다. `subjectId`는 가명 ID이므로 Supabase의 소유자 번호나 강사 등록과 대조할 수 없습니다. **실제 권한 검사는 서버 API에서** 처리합니다.
+- `src/decider.mjs`의 `resource_scope`는 엔진이 확인한 **사용자(`subjectId`)·기기(`deviceId`)·메서드·정확한 경로**가 규칙표(`NOTE_OWNER_RULES`, `NOTICE_INSTRUCTOR_RULES`)와 모두 일치할 때만 개별 메모·공지 구역을 엽니다. 경로 모양(`:id`)만 맞는 요청, 다른 사용자·기기의 같은 경로, 일반 학생의 공지 작성·수정, 규칙표에 없는 경로는 `resource_access_denied`로 거부합니다. 메모·공지 목록 조회와 메모 작성은 자료 API가 검증된 사용자로 다시 거릅니다. 저장된 소유자·강사 등록은 서버 API가 최종 확인합니다.
 - 기존 6단계 기기 등록 규칙과 7단계 가상 위험 신호 기반 추가 확인 규칙을 유지합니다. `docs/DECIDER_REQUEST.md`의 다섯 항목 응답 계약을 변경하지 않았습니다.
 - DB 스키마 재현은 `supabase/step8_instructor_resource_zones.sql`에 있습니다. 새로운 테이블에 RLS를 활성화하고 직접 공개 권한을 주지 않으며, 서버 전용 역할에서만 접근합니다. 기존 메모를 변경하거나 임의의 강사 계정을 생성하지 않습니다.
 
