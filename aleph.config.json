@@ -18,11 +18,12 @@
     "GET /api/notes/:id",
     "PUT /api/notes/:id",
     "DELETE /api/notes/:id",
+    "POST /api/restore",
     "GET /api/instructor-notices",
     "POST /api/instructor-notices",
     "GET /api/instructor-notices/:id",
     "PUT /api/instructor-notices/:id"
   ],
   "originalApiUrl": "https://vcckkpclsyokvlhwtvej.supabase.co/rest/v1/notes",
-  "restoreRoute": null
+  "restoreRoute": "/api/restore"
 }

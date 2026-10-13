@@ -142,6 +142,12 @@ export function classifyResourceRoute(request) {
       route === 'POST /api/notes') {
     return { zone: 'note', resourceId: 'note:collection' };
   }
+  // Stage 10 exact recovery route only. The server separately authenticates
+  // signed judge B and validates backup owner, note ID and SHA-256.
+  if (path === '/api/restore' && method === 'POST' &&
+      route === 'POST /api/restore') {
+    return { zone: 'restore', resourceId: 'restore:one_note' };
+  }
   if (path === '/api/instructor-notices' && method === NOTICE_COLLECTION_READ &&
       route === 'GET /api/instructor-notices') {
     return { zone: 'instructor_notice', resourceId: 'instructor_notice:collection' };

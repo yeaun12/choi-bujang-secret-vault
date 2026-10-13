@@ -402,3 +402,25 @@ git status --short
 제작 1~3의 로컬 탐지 테스트 11/11, `detect:test` 6/6, 기존 회귀 테스트 12/12는 저장점 직전 사용자 CMD에서 확인했습니다. 이번 설정·빌드 지원 변경 이후의 재검증은 별도로 필요합니다.
 
 `bundle-notes.json`은 Git에서 제외되는 로컬 파일이며 최소 `explanation` 10자 이상이 필요합니다. 커밋 반영 후 `npm run bundle`은 실측된 비인증 HTTP 결과와 커밋 정보를 `artifacts/submission.json`에 기록합니다. 두 JSON은 Git에 커밋하지 않습니다.
+
+
+## 10단계 제작 3: 시험 계정 B의 비공개 메모 사본 및 복구 경로
+
+- 서비스: 기존 메모 자료실 Vercel 서버리스 API. 복구 경로: **`POST /api/restore`** (`aleph.config.json.restoreRoute = "/api/restore"`). JSON 본문은 `{"noteId":"<복구할 한 건의 UUID>"}`이며 `id` 별칭도 허용합니다.
+- 인증: 서버가 `createLoginVerifier`로 검증한 공식 심판의 B 가상 신원(`kind=judge`, `identity=b`, 서명 검증된 run ID)만 허용합니다. 일반 학생·심판 A·익명 사용자는 복원할 수 없습니다. 토큰·메모 본문은 로그·GitHub·제출 묶음에 기록하지 않습니다.
+- 백업 확보: `POST /api/notes`가 **새로운 시험 B 메모를 최초 생성할 때만** 동일 실행·소유자의 제목·본문·원래 생성 시각을 비공개 `stage10_note_backups`에 INSERT합니다. 해시는 UTF-8 메모 본문 SHA-256입니다. 백업 기본키 `(judge_run_id, note_id)`로 덮어쓰기를 차단합니다. `GET`, `PUT` 또는 사고 후 복원 요청으로 변조된 데이터를 새 백업으로 저장하지 않습니다.
+- 복구: B의 POST 복구 요청 → 복구 감사 요청 기록 → 같은 실행·같은 ID·같은 소유자의 사본 조회 → 해시 검증 → 기존 메모가 있다면 소유자 일치 확인 후 해당 한 건 수정, 삭제된 메모라면 동일 ID로 생성 → 복구 후 ID·소유자·제목·본문 해시 재검증 → 감사 완료 기록. 사본 없음·해시 불일치·타인 소유자 충돌이면 복원을 중단합니다.
+- 기존 메모·강사 공지·다른 서비스·감사 기록은 초기화/전체 복원하지 않습니다. `stage10_restore_audit`는 메모 내용 없이 사건 종류와 이유·해시만 추가합니다.
+
+**검증 경계:** 비공개 DB 사본은 새 시험 B 메모의 최초 생성 시점에만 저장됩니다. 이 기능의 배포 전에 이미 존재한 메모나 공식 심판이 API 외부에서 직접 만든 메모에는 사전 사본이 없습니다. SHA-256만으로 사본이 침해 이전이라는 점을 증명하지는 못하며, 최초 생성 흐름과 공식 심판 순서를 확인해야 합니다. DB 작업이 연속된 여러 요청으로 처리되므로 동시 쓰기까지 완전한 단일 트랜잭션으로 보장하지는 않습니다.
+
+```cmd
+node --test test/stage10-recovery.test.mjs
+node --check api/restore.js
+node --check api/notes/index.js
+npm run decider:test
+npm run fixture:7
+npm run test:r5
+```
+
+로컬 테스트는 합성 가상 B 메모로만 수행합니다. 운영 B 토큰은 복사·출력하지 않습니다. 공식 B 메모의 실제 변조·삭제 후 복구, 1~9단계 전체 재평가와 심판 판정은 **미실행**입니다.
