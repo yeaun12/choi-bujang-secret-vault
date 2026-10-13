@@ -46,10 +46,12 @@ test('A 자기 메모 읽기·수정은 허용하고 B의 같은 메모 요청�
       assert.equal(decision.reasonCode, 'resource_access_denied');
     }
   }
-  // 규칙표에 없는 메모 ID는 경로 모양이 맞아도 열지 않는다.
+  // The dynamic API route is valid for both users; the server, not this
+  // stateless decider, must prevent B from reading A's stored owner_id.
   for (const method of ['GET', 'PUT', 'DELETE']) {
     const req = { ...base(), method, path: `/api/notes/${id}`, route: `${method} /api/notes/:id` };
-    assert.equal((await decide(req)).decision, 'deny', method);
+    assert.equal((await decide(req)).decision, 'allow', method);
+    assert.equal((await decide({ ...req, subjectId: 'other_learner_fixture' })).decision, 'allow');
   }
 });
 
@@ -110,10 +112,37 @@ test('같은 경로라도 7단계 복합 이상 사건은 여전히 추가 인�
   assert.equal((await decide({ ...risk, stepUp: { verified: true, authAgeSeconds: 60 } })).decision, 'allow');
 });
 
-test('경로 모양만 같은 다른 사용자의 개별 메모는 열지 않는다', () => {
+test('동적 UUID 경로는 자원 형식만 분류하고 사용자별 소유권은 API에서 검사한다', async () => {
   const subjectA = { ...base(), subjectId: 'anonymous_subject_A' };
   const subjectB = { ...base(), subjectId: 'anonymous_subject_B' };
-  assert.equal(classifyResourceRoute(subjectA), null);
-  assert.equal(classifyResourceRoute(subjectB), null);
-  // 자료 API도 저장된 owner_id로 다시 확인한다.
+  const expected = { zone: 'note', resourceId: `note:${id}` };
+  assert.deepEqual(classifyResourceRoute(subjectA), expected);
+  assert.deepEqual(classifyResourceRoute(subjectB), expected);
+  // Both requests may reach the API; a decider allow does NOT authorize data
+  // disclosure. The API separately compares verified A/B identity with owner_id.
+  assert.equal((await decide(subjectA)).decision, 'allow');
+  assert.equal((await decide(subjectB)).decision, 'allow');
+  // See resource-api-auth.test.mjs for the independent A-owns/B-denied test.
+});
+
+test('동적 UUID 메모는 정확한 경로만 열고 기능 경로·쿼리·부정확한 라우트는 막는다', async () => {
+  const own = { ...base(), method: 'GET', path: `/api/notes/${id}`, route: 'GET /api/notes/:id' };
+  assert.deepEqual(classifyResourceRoute(own), { zone: 'note', resourceId: `note:${id}` });
+  const malformed = [
+    { path: '/api/notes/export' },
+    { path: `/api/notes/${id}/export` },
+    { path: `/api/notes/${id}/` },
+    { path: `/api/notes/${id}?role=instructor` },
+    { queryLength: 1 },
+    { route: 'GET /api/notes' },
+    { route: 'GET /api/notes/export' },
+    { method: 'POST', route: 'POST /api/notes/:id' },
+    { deviceId: 'not-a-verified-device' },
+  ];
+  for (const invalid of malformed) {
+    const request = { ...own, ...invalid, requestId: randomUUID() };
+    assert.equal((await decide(request)).decision, 'deny', JSON.stringify(invalid));
+  }
+  const unknown = { ...own, path: '/notes/another-learner', route: 'GET /notes/:id' };
+  assert.equal((await decide(unknown)).decision, 'deny');
 });

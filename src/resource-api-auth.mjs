@@ -38,17 +38,21 @@ export function isOwnedNoteList(identity, rows) {
 }
 
 export function getExactNoteId(request) {
-  let path;
-  try { path = new URL(request.url).pathname; } catch { return null; }
-  const resource = noteResourceFromApiPath(path);
+  let url;
+  try { url = new URL(request.url); } catch { return null; }
+  // Query-based resource selection must not silently turn into a normal read.
+  if (url.search || url.hash) return null;
+  const resource = noteResourceFromApiPath(url.pathname);
   return resource?.resourceId.startsWith('note:') &&
     resource.resourceId !== 'note:collection'
     ? resource.resourceId.slice('note:'.length) : null;
 }
 
 export function isExactNoteCollection(request) {
-  try { return new URL(request.url).pathname === '/api/notes'; }
-  catch { return false; }
+  try {
+    const url = new URL(request.url);
+    return url.pathname === '/api/notes' && !url.search && !url.hash;
+  } catch { return false; }
 }
 
 // Read the server-stored owner before changing a record. All mutations must
