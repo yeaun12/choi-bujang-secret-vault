@@ -481,3 +481,12 @@ git status --short
 - JWT의 **서명(ES256), 등록된 judgeIssuer, 만료, run ID, A/B 구분, 서명된 sub** 검사는 유지합니다. 허용 대상은 기존 고정 도메인과, 사용자가 조작하는 Host 헤더가 아닌 **Vercel 플랫폼 환경변수 `VERCEL_URL`** 중 저장소 프로젝트 이름 규칙에 맞는 배포 호스트만입니다.
 - 진단 재현: `node --test test/stage10-judge-audience.test.mjs`. 정상 심판 B 토큰을 두 주소로 검증하고 타 프로젝트 주소는 거부합니다. 기존 1~9단계·10단계 정책/복구 회귀 및 로컬 빌드는 별도 CI에서도 검사했습니다.
 - **운영 한계:** 이전 공식 심판의 실패 원인은 심판 토큰·상태코드가 제공되지 않아 확정되지 않았습니다. 이 보완 전 실제 `stage10_note_backups`와 `stage10_restore_audit`가 모두 0건이었습니다. 재심판 후 기록·복구 ID/소유자/해시·사후 실제 HTTP 테스트를 확인해야 최종 통과로 표시합니다. 기존 데이터는 임의로 변경하지 않습니다.
+
+### 10단계 복구 경로 보강 (변조 후 복구 판정 대응)
+
+- `POST /api/restore` 본문: `{"noteId":"<UUID>"}` (별칭 `id`·`note_id`·`memoId`). 서로 다른 ID 두 개는 거부합니다. 미리보기는 `{"noteId":"…","dryRun":true}`이며 메모를 바꾸지 않고 **사본 버전(`version`)과 바뀔 항목(`changes`)**만 보여 줍니다. `contentSha256`·`ownerId`를 함께 보내면 사본과 다를 때 409로 멈춥니다. ID를 생략하면 이번 실행의 검증된 B 사본 가운데 **현재와 다른 메모가 정확히 한 건**일 때만 그 한 건을 대상으로 하고, 아니면 400입니다.
+- 실행 순서: 사본 두 번 다시 읽기·해시 검증(미리보기) → 소유자 확인 → 복원 직전 사본 재확인 → 한 건만 수정/재생성 → DB 행 재조회로 ID·소유자·본문 SHA-256 대조 → 감사 기록. 사본 없음(404)·검증 실패(409)이면 복원하지 않습니다.
+- 응답: `restored`, `id`, `ownerId`(서명된 B 주체), `owner.storageOwnerId`, `contentSha256`, `version`, `changes`, `backup{verified, rereadBeforeWrite, version, noteId, ownerId, contentSha256}`, `match{id, ownerId, contentSha256, all}`, `retest{passed, normal[], forbidden[], notRun[]}`.
+- 복구 뒤 재시험은 배포된 `GET /api/notes/:id` 처리기를 같은 함수 안에서 실제로 호출합니다(정상 B 읽기 200·해시 일치, 비로그인 401, 쿼리 우회 400, B의 A 메모 404). A 메모가 없으면 `notRun`에 남기고 결과를 지어내지 않습니다. 재시험이 실패해도 복원 사실은 숨기지 않고 `retest.passed=false`로 보고합니다.
+- Vercel 함수 로그에는 `stage10_restore` 단계·이유 코드·상태만 남깁니다(토큰·본문 없음).
+- 로컬 확인: `node --test test/stage10-restore-api.test.mjs test/stage10-recovery.test.mjs test/stage10-postrestore-retest.test.mjs` (합성 가상 B 메모). 실제 심판 B의 변조→복구는 **미실행**이며 재제출 판정으로만 확인합니다.

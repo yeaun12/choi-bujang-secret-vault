@@ -19,7 +19,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: node --check src/verify-login.mjs
-      - run: node --test test/stage10-judge-audience.test.mjs test/stage10-recovery.test.mjs test/stage10-postrestore-retest.test.mjs
+      - run: node --test test/stage10-judge-audience.test.mjs test/stage10-recovery.test.mjs test/stage10-postrestore-retest.test.mjs test/stage10-restore-api.test.mjs
       - run: node --test test/stage10-policy-diff.test.mjs test/stage10-policy-restore.test.mjs test/resource-id.test.mjs test/resource-policy.test.mjs test/resource-api-auth.test.mjs test/instructor-notices.test.mjs
       - run: npm run test:r5
       - run: npm run decider:test

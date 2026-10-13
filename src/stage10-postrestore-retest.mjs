@@ -26,6 +26,17 @@ export function permittedRetestOrigin(requestUrl, configuredAppUrl, deploymentHo
   return request.origin;
 }
 
+const RETEST_KIND = { normal_read: 'normal', anonymous_denied: 'forbidden',
+  query_rejected: 'forbidden', foreign_denied: 'forbidden' };
+const RETEST_REQUEST = {
+  normal_read: 'GET /api/notes/:id as B (restored note)',
+  anonymous_denied: 'GET /api/notes/:id without login',
+  query_rejected: 'GET /api/notes/:id?owner_id=… as B',
+  foreign_denied: "GET /api/notes/:id of A's note as B",
+};
+const RETEST_EXPECTED = { normal_read: '200 and body SHA-256 equals backup',
+  anonymous_denied: '401', query_rejected: '400', foreign_denied: '404' };
+
 export async function runPostRestoreHttpRetests({
   identity, noteId, expectedSha256, authorization, requestUrl,
   configuredAppUrl, deploymentHost = '', repository, fetchImpl = fetch,
@@ -102,15 +113,17 @@ export async function runPostRestoreHttpRetests({
       reason_code: 'retest_' + name + '_' + (status ?? 'network') +
         '_' + (passed ? 'pass' : 'fail'),
     });
-    results.push({ check: name, status, result: passed ? 'passed' : 'failed' });
+    results.push({ check: name, kind: RETEST_KIND[name], request: RETEST_REQUEST[name],
+      expected: RETEST_EXPECTED[name], status, result: passed ? 'passed' : 'failed' });
   }
   if (!calls.some(x => x.name === 'foreign_denied')) {
     await repository.appendAudit({
       ...meta, event_kind: 'restore_rejected',
       reason_code: 'retest_foreign_not_run_no_a_note',
     });
-    results.push({ check: 'foreign_denied', status: null,
-      result: 'not_run_no_verified_a_note' });
+    results.push({ check: 'foreign_denied', kind: 'forbidden',
+      request: RETEST_REQUEST.foreign_denied, expected: RETEST_EXPECTED.foreign_denied,
+      status: null, result: 'not_run_no_verified_a_note' });
   }
   return { passed: results.every(x => x.result !== 'failed'), results };
 }

@@ -17,6 +17,12 @@ export function stage10Repository(database) {
         .eq('judge_run_id', judge_run_id).eq('identity_label', identity_label)
         .eq('note_id', note_id).eq('owner_id', owner_id).maybeSingle());
     },
+    async listBackupNoteIds({ judge_run_id, identity_label, owner_id }) {
+      const rows = ensure(await database.from('stage10_note_backups').select('note_id')
+        .eq('judge_run_id', judge_run_id).eq('identity_label', identity_label)
+        .eq('owner_id', owner_id).limit(50));
+      return (rows ?? []).map(row => row.note_id);
+    },
     async findFirstNoteIdByOwner(ownerId) {
       // Read the ID of the deterministic judge-A zone only, never A's body.
       const row = ensure(await database.from('notes').select('id')

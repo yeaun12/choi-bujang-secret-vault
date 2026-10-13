@@ -182,6 +182,9 @@ export async function restoreOneJudgeBNote({ identity, noteId, repository }) {
   }
   const fields = { id, owner_id: owner, title: backupAgain.title, content: backupAgain.content,
     created_at: backupAgain.note_created_at };
+  const changedFields = changedNoteFields(current, fields);
+  const beforeSha256 = current && typeof current.content === 'string'
+    ? sha256(current.content) : null;
   let mode = 'unchanged';
   if (!current) {
     const created = await repository.insertOwnedNote(fields);
@@ -211,5 +214,83 @@ export async function restoreOneJudgeBNote({ identity, noteId, repository }) {
   }
   await audit('restore_verified', mode, backupAgain.content_sha256);
   return { status: 200, noteId: verified.id, ownerId: verified.owner_id,
-    contentSha256: sha256(verified.content), mode };
+    contentSha256: sha256(verified.content), mode, changedFields, beforeSha256,
+    backup: backupEvidence(backupAgain) };
+}
+
+// Fields that a restore would change. 'missing' means the row was deleted.
+export function changedNoteFields(current, fields) {
+  if (!current) return ['missing'];
+  const changed = [];
+  if (current.title !== fields.title) changed.push('title');
+  if (current.content !== fields.content) changed.push('content');
+  if (!sameStoredInstant(current.created_at, fields.created_at)) changed.push('created_at');
+  return changed;
+}
+
+// Metadata only: never the backup title/content.
+export function backupEvidence(snapshot) {
+  return { verified: true, rereadBeforeWrite: true,
+    version: snapshot.captured_at, noteId: snapshot.note_id,
+    ownerId: snapshot.owner_id, contentSha256: snapshot.content_sha256,
+    noteCreatedAt: snapshot.note_created_at };
+}
+
+// Read-only preview: re-read and verify the private snapshot twice, then show
+// the version and which fields WOULD change. Never writes notes.
+export async function previewOneJudgeBNote({ identity, noteId, repository }) {
+  if (!isJudgeB(identity)) return { status: 403, code: 'judge_b_required' };
+  if (typeof noteId !== 'string' || !UUID.test(noteId)) {
+    return { status: 400, code: 'invalid_note_id' };
+  }
+  const id = noteId.toLowerCase();
+  const owner = noteScopeOwnerId(identity);
+  const meta = { judge_run_id: identity.runId.toLowerCase(),
+    identity_label: 'b', note_id: id, owner_id: owner };
+  const audit = async (event_kind, reason_code) =>
+    repository.appendAudit({ ...meta, event_kind, reason_code, content_sha256: null });
+  await audit('restore_requested', 'preview_requested');
+  const backup = await repository.findBackup(meta);
+  if (!backup) {
+    await audit('restore_rejected', 'preview_backup_missing');
+    return { status: 404, code: 'preincident_backup_missing' };
+  }
+  const again = await repository.findBackup(meta);
+  if (!validateBackup(identity, id, backup) || !validateBackup(identity, id, again)
+      || !sameStoredBackup(backup, again)) {
+    await audit('restore_rejected', 'preview_snapshot_integrity_failed');
+    return { status: 409, code: 'snapshot_integrity_failed' };
+  }
+  const current = await repository.findNoteById(id);
+  if (current && current.owner_id !== owner) {
+    await audit('restore_rejected', 'preview_owner_conflict');
+    return { status: 409, code: 'owner_conflict' };
+  }
+  const changedFields = changedNoteFields(current, { title: again.title,
+    content: again.content, created_at: again.note_created_at });
+  return { status: 200, noteId: id, ownerId: owner, changedFields,
+    beforeSha256: current && typeof current.content === 'string'
+      ? sha256(current.content) : null,
+    backup: backupEvidence(again) };
+}
+
+// When the caller names no note: restore only if EXACTLY one of this run's
+// verified B snapshots differs from the live row. Otherwise require noteId.
+export async function findSingleChangedJudgeBNote({ identity, repository }) {
+  if (!isJudgeB(identity)) return null;
+  const owner = noteScopeOwnerId(identity);
+  const ids = await repository.listBackupNoteIds({
+    judge_run_id: identity.runId.toLowerCase(), identity_label: 'b', owner_id: owner,
+  });
+  const changed = [];
+  for (const noteId of ids) {
+    const snapshot = await repository.findBackup({ judge_run_id: identity.runId.toLowerCase(),
+      identity_label: 'b', note_id: noteId, owner_id: owner });
+    if (!validateBackup(identity, noteId, snapshot)) continue;
+    const current = await repository.findNoteById(noteId);
+    if (current && current.owner_id !== owner) continue;
+    if (changedNoteFields(current, { title: snapshot.title, content: snapshot.content,
+      created_at: snapshot.note_created_at }).length) changed.push(noteId);
+  }
+  return changed.length === 1 ? changed[0] : null;
 }
