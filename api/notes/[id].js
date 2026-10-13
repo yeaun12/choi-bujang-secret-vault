@@ -3,6 +3,8 @@ import config from '../../aleph.config.json' with { type: 'json' };
 import { traceStage8Access } from '../../src/stage8-access-trace.mjs';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
 import { checkStoredNoteOwner, getExactNoteId, isStoredNoteOwner, noteScopeOwnerId } from '../../src/resource-api-auth.mjs';
+import { isJudgeB, backupBeforeJudgeBMutation } from '../../src/stage10-note-recovery.mjs';
+import { stage10Repository } from '../../src/stage10-recovery-repository.mjs';
 
 let supabase = null;
 let verifyLoginAuthorization = null;
@@ -138,6 +140,23 @@ export async function PUT(request) {
   if (ownership === 'error') return jsonError(500, 'Ownership check failed.');
   if (ownership !== 'allowed') return jsonError(404, 'Note not found.');
 
+  // For judge B's first PUT/DELETE, snapshot the exact B-owned old row
+  // BEFORE changing it; fail closed if backup cannot be re-read and verified.
+  if (isJudgeB(auth.identity)) {
+    try {
+      const repository = stage10Repository(supabase);
+      const before = await repository.findNoteById(id);
+      if (!before || !isStoredNoteOwner(auth.identity, before.owner_id)) {
+        return jsonError(404, 'Note not found.');
+      }
+      await backupBeforeJudgeBMutation({
+        identity: auth.identity, note: before, repository,
+      });
+    } catch {
+      return jsonError(503, 'Safe backup was not verified.');
+    }
+  }
+
   const { data, error } = await supabase
     .from('notes')
     .update({
@@ -176,6 +195,23 @@ export async function DELETE(request) {
   const ownership = await checkStoredNoteOwner(supabase, auth.identity, id);
   if (ownership === 'error') return jsonError(500, 'Ownership check failed.');
   if (ownership !== 'allowed') return jsonError(404, 'Note not found.');
+
+  // For judge B's first PUT/DELETE, snapshot the exact B-owned old row
+  // BEFORE changing it; fail closed if backup cannot be re-read and verified.
+  if (isJudgeB(auth.identity)) {
+    try {
+      const repository = stage10Repository(supabase);
+      const before = await repository.findNoteById(id);
+      if (!before || !isStoredNoteOwner(auth.identity, before.owner_id)) {
+        return jsonError(404, 'Note not found.');
+      }
+      await backupBeforeJudgeBMutation({
+        identity: auth.identity, note: before, repository,
+      });
+    } catch {
+      return jsonError(503, 'Safe backup was not verified.');
+    }
+  }
 
   const { data, error } = await supabase
     .from('notes')

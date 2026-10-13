@@ -50,17 +50,75 @@ export function validateBackup(identity, noteId, snapshot) {
   return true;
 }
 
+function backupLookup(snapshot) {
+  return {
+    judge_run_id: snapshot.judge_run_id, identity_label: snapshot.identity_label,
+    note_id: snapshot.note_id, owner_id: snapshot.owner_id,
+  };
+}
+
+// A returned INSERT row is not backup verification: independently SELECT the
+// immutable snapshot from storage and check every required binding. The
+// payload is never returned to clients or printed in logs.
+export async function readVerifiedBackup(identity, noteId, repository) {
+  if (!isJudgeB(identity) || typeof noteId !== 'string' || !UUID.test(noteId)) {
+    throw new Error('stage10_verified_backup_identity_required');
+  }
+  const stored = await repository.findBackup({
+    judge_run_id: identity.runId.toLowerCase(), identity_label: 'b',
+    note_id: noteId.toLowerCase(), owner_id: noteScopeOwnerId(identity),
+  });
+  if (!validateBackup(identity, noteId, stored)) {
+    throw new Error('stage10_verified_backup_missing_or_invalid');
+  }
+  return stored;
+}
+
+function matchesOriginal(snapshot, original) {
+  return snapshot.title === original.title &&
+    snapshot.content_sha256 === original.content_sha256 &&
+    sha256(snapshot.content) === original.content_sha256 &&
+    Date.parse(snapshot.note_created_at) === Date.parse(original.note_created_at);
+}
+
+async function captureAndVerify(identity, note, repository, reasonCode, allowExisting) {
+  const proposed = snapshotFromCreatedNote(identity, note);
+  if (allowExisting) {
+    // A previously saved, valid pre-incident snapshot wins. Never replace it
+    // with a later (possibly corrupted) note version.
+    const existing = await repository.findBackup(backupLookup(proposed));
+    if (existing) {
+      if (!validateBackup(identity, proposed.note_id, existing)) {
+        throw new Error('stage10_existing_backup_invalid');
+      }
+      return { saved: false, verified: true, noteId: proposed.note_id };
+    }
+  }
+  await repository.insertBackup(proposed); // INSERT only, no UPSERT/UPDATE.
+  const verified = await readVerifiedBackup(identity, proposed.note_id, repository);
+  if (!matchesOriginal(verified, proposed)) {
+    throw new Error('stage10_backup_readback_mismatch');
+  }
+  await repository.appendAudit({
+    ...backupLookup(proposed), event_kind: 'backup_created',
+    reason_code: reasonCode, content_sha256: proposed.content_sha256,
+  });
+  return { saved: true, verified: true, noteId: proposed.note_id,
+    sha256: proposed.content_sha256 };
+}
+
 export async function backupCreatedJudgeBNote({ identity, note, repository }) {
   if (!isJudgeB(identity)) return { skipped: true };
-  const snapshot = snapshotFromCreatedNote(identity, note);
-  // PK (judge_run_id, note_id) blocks overwriting; no upsert/UPDATE.
-  await repository.insertBackup(snapshot);
-  await repository.appendAudit({
-    judge_run_id: snapshot.judge_run_id, identity_label: 'b', note_id: snapshot.note_id,
-    owner_id: snapshot.owner_id, event_kind: 'backup_created',
-    reason_code: 'initial_created_note', content_sha256: snapshot.content_sha256,
-  });
-  return { saved: true, noteId: snapshot.note_id, sha256: snapshot.content_sha256 };
+  return captureAndVerify(identity, note, repository, 'initial_created_note', false);
+}
+
+// If official test B was preseeded outside our create API, capture the
+// ORIGINAL B-owned row before its FIRST authenticated PUT or DELETE.
+// This cannot recover a record already corrupted outside our API; do not
+// treat a later read as proof of pre-attack provenance.
+export async function backupBeforeJudgeBMutation({ identity, note, repository }) {
+  if (!isJudgeB(identity)) return { skipped: true };
+  return captureAndVerify(identity, note, repository, 'before_note_mutation', true);
 }
 
 export async function restoreOneJudgeBNote({ identity, noteId, repository }) {

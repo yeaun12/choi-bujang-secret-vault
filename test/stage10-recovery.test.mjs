@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isJudgeB, sha256, snapshotFromCreatedNote,
-  backupCreatedJudgeBNote, restoreOneJudgeBNote,
+  backupCreatedJudgeBNote, backupBeforeJudgeBMutation,
+  readVerifiedBackup, restoreOneJudgeBNote,
 } from '../src/stage10-note-recovery.mjs';
 import { noteScopeOwnerId } from '../src/resource-api-auth.mjs';
 
@@ -116,4 +117,59 @@ test('already restored note remains unchanged, existing audit entries preserved'
   assert.equal(second.mode, 'unchanged');
   assert.equal(db.audits.length, 5);
   assert.equal(db.audits[0].event_kind, 'earlier_audit');
+});
+
+test('backup creation re-reads persisted bytes; mismatch or missing row fails closed', async () => {
+  const db = memory();
+  await backupCreatedJudgeBNote({ identity: B, note: original, repository: db.repository });
+  assert.equal((await readVerifiedBackup(B, id, db.repository)).content_sha256,
+    sha256(original.content));
+  const failing = memory();
+  const missing = {
+    ...failing.repository, findBackup: async () => null,
+  };
+  await assert.rejects(
+    backupCreatedJudgeBNote({ identity: B, note: original, repository: missing }),
+    /stage10_verified_backup_missing_or_invalid/u,
+  );
+  const changed = memory();
+  const tampered = { ...changed.repository, findBackup: async () => ({
+    ...snapshot(), title: 'wrong',
+  }) };
+  await assert.rejects(
+    backupCreatedJudgeBNote({ identity: B, note: original, repository: tampered }),
+    /stage10_backup_readback_mismatch/u,
+  );
+});
+
+test('preseeded judge B row is snapshotted and read back before first mutation', async () => {
+  const db = memory();
+  const first = await backupBeforeJudgeBMutation({
+    identity: B, note: original, repository: db.repository,
+  });
+  assert.equal(first.saved, true);
+  db.row.content = 'changed in memory';
+  const second = await backupBeforeJudgeBMutation({
+    identity: B, note: db.row, repository: db.repository,
+  });
+  assert.equal(second.saved, false);
+  assert.equal(db.backup.content, original.content);
+  assert.equal(db.audits.filter(x => x.event_kind === 'backup_created').length, 1);
+  const restored = await restoreOneJudgeBNote({
+    identity: B, noteId: id, repository: db.repository,
+  });
+  assert.equal(restored.mode, 'repaired');
+  assert.equal(db.row.content, original.content);
+});
+
+test('before-mutation capture refuses missing or invalid DB read-back; A not eligible', async () => {
+  const db = memory();
+  const bad = { ...db.repository, findBackup: async () => null };
+  await assert.rejects(backupBeforeJudgeBMutation({
+    identity: B, note: original, repository: bad,
+  }), /stage10_verified_backup_missing_or_invalid/u);
+  const ignored = await backupBeforeJudgeBMutation({
+    identity: A, note: original, repository: db.repository,
+  });
+  assert.deepEqual(ignored, { skipped: true });
 });
