@@ -353,6 +353,8 @@ npm run test:r5
 npm run build -- --local
 ```
 
+메모와 강사 공지의 자료 API에서는 쿼리가 붙은 목록·단건 경로를 거부합니다. 요청자가 쿼리로 다른 소유자나 기능을 지정해도 정상 리소스 경로로 취급하지 않습니다. 이 점검은 심판 실패 원인에 대한 가설이며 실제 심판 재현으로 확인되지 않았습니다.
+
 `npm run bundle`은 **커밋한 뒤**, 깨끗한 Git 작업 트리와 로컬 전용 `bundle-notes.json`의 `explanation`이 준비됐을 때만 실행합니다. 이 명령은 `artifacts/submission.json`을 만들면서 배포 API에 비인증 HTTP 점검을 실시합니다. 생성 파일과 `bundle-notes.json`은 커밋하지 않습니다.
 
 ### 실제 계정 및 API 검증 (2026-10-13)

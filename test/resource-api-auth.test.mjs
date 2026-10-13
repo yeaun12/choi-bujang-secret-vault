@@ -49,6 +49,10 @@ test('정확한 자료 경로만 자료 ID로 인정', () => {
   assert.equal(getExactNoteId(path(`/api/notices/${a}`)), null);
   assert.equal(getExactNoteId(path(`/api/notes/${a}/export`)), null);
   assert.equal(isExactNoteCollection(path('/api/notes/export')), false);
+  assert.equal(isExactNoteCollection(path('/api/notes?owner_id=someone_else')), false);
+  assert.equal(isExactNoteCollection(path('/api/notes?role=instructor')), false);
+  assert.equal(getExactNoteId(path(`/api/notes/${a}?owner_id=someone_else`)), null);
+  assert.equal(getExactNoteId(path(`/api/notes/${a}?export=true`)), null);
 });
 
 test('심판이 같은 sub를 보내도 서명 검증된 A/B 구역은 독립이다', async () => {

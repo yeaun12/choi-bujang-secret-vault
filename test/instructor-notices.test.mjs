@@ -28,4 +28,6 @@ test('공지 컬렉션과 정확한 항목 ID만 분류', () => {
   assert.deepEqual(noticePath(p('/api/instructor-notices/' + a)), { collection: false, id: a });
   assert.equal(noticePath(p('/api/instructor-notices/export')), null);
   assert.equal(noticePath(p('/api/instructor-notices/' + a + '/export')), null);
+  assert.equal(noticePath(p('/api/instructor-notices?role=instructor')), null);
+  assert.equal(noticePath(p('/api/instructor-notices/' + a + '?role=instructor')), null);
 });

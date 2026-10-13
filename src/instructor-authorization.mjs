@@ -3,7 +3,9 @@ export const NOTICE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9
 
 export function noticePath(request) {
   try {
-    const pathname = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    if (url.search || url.hash) return null;
+    const pathname = url.pathname;
     if (pathname === '/api/instructor-notices') return { collection: true };
     const match = /^\/api\/instructor-notices\/([0-9a-f-]{36})$/iu.exec(pathname);
     if (!match || !NOTICE_UUID.test(match[1])) return null;
