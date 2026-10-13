@@ -1,9 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import config from '../../aleph.config.json' with { type: 'json' };
 import { createLoginVerifier } from '../../src/verify-login.mjs';
-
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+import { checkStoredNoteOwner, getExactNoteId, isStoredNoteOwner } from '../../src/resource-api-auth.mjs';
 
 let supabase = null;
 let verifyLoginAuthorization = null;
@@ -65,18 +63,6 @@ async function authorize(request) {
   return { identity };
 }
 
-function getNoteId(request) {
-  const pathname = new URL(request.url).pathname;
-  const parts = pathname.split('/').filter(Boolean);
-  const id = parts.at(-1);
-
-  if (!id || !UUID.test(id)) {
-    return null;
-  }
-
-  return id;
-}
-
 export async function GET(request) {
   const auth = await authorize(request);
 
@@ -84,7 +70,7 @@ export async function GET(request) {
     return auth.response;
   }
 
-  const id = getNoteId(request);
+  const id = getExactNoteId(request);
 
   if (!id) {
     return jsonError(400, 'Invalid note id.');
@@ -92,7 +78,7 @@ export async function GET(request) {
 
   const { data, error } = await supabase
     .from('notes')
-    .select('id, title, content')
+    .select('id, title, content, owner_id')
     .eq('id', id)
     .eq('owner_id', auth.identity.userId)
     .maybeSingle();
@@ -101,7 +87,7 @@ export async function GET(request) {
     return jsonError(500, 'Note could not be loaded.');
   }
 
-  if (!data) {
+  if (!data || !isStoredNoteOwner(auth.identity, data.owner_id)) {
     return jsonError(404, 'Note not found.');
   }
 
@@ -119,7 +105,7 @@ export async function PUT(request) {
     return auth.response;
   }
 
-  const id = getNoteId(request);
+  const id = getExactNoteId(request);
 
   if (!id) {
     return jsonError(400, 'Invalid note id.');
@@ -143,6 +129,10 @@ export async function PUT(request) {
     return jsonError(400, 'Invalid note input.');
   }
 
+  const ownership = await checkStoredNoteOwner(supabase, auth.identity, id);
+  if (ownership === 'error') return jsonError(500, 'Ownership check failed.');
+  if (ownership !== 'allowed') return jsonError(404, 'Note not found.');
+
   const { data, error } = await supabase
     .from('notes')
     .update({
@@ -151,14 +141,14 @@ export async function PUT(request) {
     })
     .eq('id', id)
     .eq('owner_id', auth.identity.userId)
-    .select('id')
+    .select('id, owner_id')
     .maybeSingle();
 
   if (error) {
     return jsonError(500, 'Note could not be updated.');
   }
 
-  if (!data) {
+  if (!data || !isStoredNoteOwner(auth.identity, data.owner_id)) {
     return jsonError(404, 'Note not found.');
   }
 
@@ -172,25 +162,29 @@ export async function DELETE(request) {
     return auth.response;
   }
 
-  const id = getNoteId(request);
+  const id = getExactNoteId(request);
 
   if (!id) {
     return jsonError(400, 'Invalid note id.');
   }
+
+  const ownership = await checkStoredNoteOwner(supabase, auth.identity, id);
+  if (ownership === 'error') return jsonError(500, 'Ownership check failed.');
+  if (ownership !== 'allowed') return jsonError(404, 'Note not found.');
 
   const { data, error } = await supabase
     .from('notes')
     .delete()
     .eq('id', id)
     .eq('owner_id', auth.identity.userId)
-    .select('id')
+    .select('id, owner_id')
     .maybeSingle();
 
   if (error) {
     return jsonError(500, 'Note could not be deleted.');
   }
 
-  if (!data) {
+  if (!data || !isStoredNoteOwner(auth.identity, data.owner_id)) {
     return jsonError(404, 'Note not found.');
   }
 
