@@ -87,7 +87,7 @@ function requiresAdditionalVerification(context) {
 // API의 동적 UUID 메모 경로는 형식만 검사하며 소유권을 의미하지 않습니다.
 // 저장된 소유자와 강사 권한은 서버 API에서 반드시 다시 확인합니다.
 const AUTH_METHODS = new Set(['POST', 'PUT', 'DELETE']);
-const NOTE_COLLECTION_METHODS = new Set(['GET', 'POST']);
+const NOTE_CREATE_METHOD = 'POST';
 const NOTE_ITEM_METHODS = new Set(['GET', 'PUT', 'DELETE']);
 const NOTE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const NOTICE_COLLECTION_READ = 'GET';
@@ -135,12 +135,12 @@ export function classifyResourceRoute(request) {
     return { zone: 'auth', resourceId: 'auth:session' };
   }
 
-  // 목록은 자료 API가 검증된 사용자의 owner_id로만 걸러 냅니다.
-  for (const prefix of ['/api/notes', '/notes']) {
-    if (path === prefix && NOTE_COLLECTION_METHODS.has(method) &&
-        route === `${method} ${prefix}`) {
-      return { zone: 'note', resourceId: 'note:collection' };
-    }
+  // Global list routes have no proven per-user scope in the decider contract.
+  // Only note creation enters the API; its owner_id is set from verified identity.
+  // GET /api/notes and GET /notes remain server-API concerns, never policy allows.
+  if (path === '/api/notes' && method === NOTE_CREATE_METHOD &&
+      route === 'POST /api/notes') {
+    return { zone: 'note', resourceId: 'note:collection' };
   }
   if (path === '/api/instructor-notices' && method === NOTICE_COLLECTION_READ &&
       route === 'GET /api/instructor-notices') {

@@ -21,15 +21,20 @@ test('기기 등록·기존 위험 탐지 규칙과 8단계 규칙을 유지한�
   assert.equal((await decide(suspicious)).decision, 'step_up');
 });
 
-test('메모 목록은 정확한 메서드·경로로 분류한다', async () => {
-  for (const [method, path, route] of [
-    ['GET', '/api/notes', 'GET /api/notes'],
-    ['POST', '/api/notes', 'POST /api/notes'],
-  ]) {
-    const req = { ...base(), method, path, route };
-    assert.equal(classifyResourceRoute(req)?.resourceId, 'note:collection');
-    assert.equal((await decide(req)).decision, 'allow');
+test('심판 구역 규칙: 전체 메모 목록은 거부하고 정확한 생성 경로만 분류한다', async () => {
+  for (const path of ['/api/notes', '/notes']) {
+    for (const method of ['GET', 'PUT', 'PATCH', 'DELETE']) {
+      const req = { ...base(), method, path, route: `${method} ${path}` };
+      assert.equal(classifyResourceRoute(req), null);
+      assert.equal((await decide(req)).decision, 'deny');
+    }
   }
+  const legacyCreate = { ...base(), method: 'POST', path: '/notes', route: 'POST /notes' };
+  assert.equal((await decide(legacyCreate)).decision, 'deny');
+
+  const create = { ...base(), method: 'POST', path: '/api/notes', route: 'POST /api/notes' };
+  assert.deepEqual(classifyResourceRoute(create), { zone: 'note', resourceId: 'note:collection' });
+  assert.equal((await decide(create)).decision, 'allow');
 });
 
 test('A 자기 메모 읽기·수정은 허용하고 B의 같은 메모 요청은 거부한다', async () => {
@@ -145,4 +150,30 @@ test('동적 UUID 메모는 정확한 경로만 열고 기능 경로·쿼리·�
   }
   const unknown = { ...own, path: '/notes/another-learner', route: 'GET /notes/:id' };
   assert.equal((await decide(unknown)).decision, 'deny');
+});
+
+test('심판 구역 규칙: 반 공지·강사 자료 모든 쓰기 동작 거부', async () => {
+  const routes = [
+    ['/api/instructor-notices', '/api/instructor-notices'],
+    [`/api/instructor-notices/${id}`, '/api/instructor-notices/:id'],
+    ['/api/notices', '/api/notices'],
+    [`/api/notices/${id}`, '/api/notices/:id'],
+    ['/notices', '/notices'],
+    ['/notices/demo', '/notices/:id'],
+    ['/api/instructor-materials', '/api/instructor-materials'],
+    [`/api/instructor-materials/${id}`, '/api/instructor-materials/:id'],
+  ];
+  for (const [path, route] of routes) {
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      for (const service of ['notes', 'notices']) {
+        const req = { ...base(), service, method, path, route: `${method} ${route}`,
+          role: 'instructor', headers: { 'x-role': 'instructor' } };
+        assert.equal(classifyResourceRoute(req), null, `${service} ${method} ${path}`);
+        assert.equal((await decide(req)).decision, 'deny', `${service} ${method} ${path}`);
+      }
+    }
+  }
+  const noticeRead = { ...base(), method: 'GET', path: '/api/instructor-notices',
+    route: 'GET /api/instructor-notices' };
+  assert.equal((await decide(noticeRead)).decision, 'allow');
 });
