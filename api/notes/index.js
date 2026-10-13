@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import config from '../../aleph.config.json' with { type: 'json' };
 import { createLoginVerifier } from '../../src/verify-login.mjs';
+import { isExactNoteCollection, isOwnedNoteList } from '../../src/resource-api-auth.mjs';
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -72,14 +73,22 @@ export async function GET(request) {
     return auth.response;
   }
 
+  if (!isExactNoteCollection(request)) {
+    return jsonError(404, 'Resource not found.');
+  }
+
   const { data, error } = await supabase
     .from('notes')
-    .select('id, title, content, created_at')
+    .select('id, title, content, created_at, owner_id')
     .eq('owner_id', auth.identity.userId)
     .order('created_at', { ascending: true });
 
   if (error) {
     return jsonError(500, 'Notes could not be loaded.');
+  }
+
+  if (!isOwnedNoteList(auth.identity, data)) {
+    return jsonError(403, 'Resource access denied.');
   }
 
   return jsonResponse(
@@ -96,6 +105,10 @@ export async function POST(request) {
 
   if (auth.response) {
     return auth.response;
+  }
+
+  if (!isExactNoteCollection(request)) {
+    return jsonError(404, 'Resource not found.');
   }
 
   let input;
