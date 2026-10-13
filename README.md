@@ -424,3 +424,37 @@ npm run test:r5
 ```
 
 로컬 테스트는 합성 가상 B 메모로만 수행합니다. 운영 B 토큰은 복사·출력하지 않습니다. 공식 B 메모의 실제 변조·삭제 후 복구, 1~9단계 전체 재평가와 심판 판정은 **미실행**입니다.
+
+
+## 10단계 제작 4: 복구 후 1~9단계 재검증 순서
+
+**실행 조건:** 실제 공식 시험 계정 B의 **침해 전 검증된 사본**에서 변조·삭제된 대상 **한 건만** 복원하고, ID·소유자·본문 SHA-256 일치를 확인합니다. 사전 사본 없거나 출처·해시 검증 실패 시 복원을 중단합니다. 아래 가상 테스트 결과는 운영 복구 뒤 실제 재시험으로 대체할 수 없습니다.
+
+1. **10단계 복원과 감사:** 같은 심판 실행(run)의 B 메모 최초 백업 존재 확인 → 변조/삭제 → `POST /api/restore`에 서명 검증된 B와 `noteId` 하나만 전달 → 백업과 동일한 `id`, `owner_id`, 본문 SHA-256 및 정상 메모 수·감사 이력 보존 확인. 사본 누락·다른 ID/소유자·해시 불일치·시험 A/익명/학생 신원은 거부.
+2. **1~2단계 정적 유출 방지:** 비인증 `GET /data.json`은 404이며 초기 공개 가상 자료가 다시 노출되지 않는지 확인.
+3. **3단계 인증:** 비인증 `GET /api/notes`, `POST /api/notes`, 잘못된 로그인 토큰 요청은 401/403으로 거부; 본인 로그인 후 본인 메모 목록은 유지.
+4. **4~5단계 소유권/서버 경로:** 정상 A의 자기 메모 `GET` 유지, B의 A 메모 `GET`/`PUT`/`DELETE`는 404. 역할·소유자 주장 또는 쿼리로 우회 불가. 다른 메모 원본 불변.
+5. **6단계 기기:** 등록 기기 가상 요청은 `allow`; 미등록 기기는 `deny/device_not_registered`.
+6. **7단계 추가 인증:** 정상 사건 `allow`; 낯선 네트워크·비정상 시간·최근 위험 사건이 모두 겹친 가상 요청 `step_up`; 후속 검증된 요청만 재허용.
+7. **8단계 자원 구역:** 학생 강사 공지 조회는 유지, 공지 작성·수정 거부. 판정기의 전체 목록 허용·기능 경로·역할 위조는 거부.
+8. **9단계 이상 조회:** 10분 내 단일 가명 사용자 GET 120건 `observe`, 121건 `propose_revocation/burst_read`; 다른 사용자·시간대 혼합 금지. 실제 세션 회수는 공식 엔진 평가.
+
+### 재검증 명령
+
+```cmd
+node --test test/stage10-policy-diff.test.mjs test/stage10-policy-restore.test.mjs test/stage10-recovery.test.mjs
+node --test test/resource-id.test.mjs test/resource-policy.test.mjs test/resource-api-auth.test.mjs test/instructor-notices.test.mjs
+node --test test/stage9-detect-input.test.mjs test/stage9-burst-rule.test.mjs test/stage9-proposal.test.mjs
+npm run detect:test
+npm run decider:test
+npm run fixture:7
+npm run test:r5
+npm run build -- --local
+git status --short
+```
+
+**이미 확인한 로컬 결과:** 사용자 CMD로 10단계 정책 복원 8/8, 가상 메모 복원 5/5, 자원 접근 통제 16/16, 판정기 4건, 탐지 6건, 7단계 allow/step_up, R5 회귀 14/14, 로컬 빌드 성공. 이 검증은 **실제 B 메모 복구 후 실행한 테스트가 아닙니다**.
+
+**미실행:** 공식 B 메모 백업 생성 → 실제 변조·삭제 → POST 복원 → 원본 해시·소유자 대조; 실제 A/B 세션의 정상/거부 요청 재검증; 공식 심판의 1~9단계 공격 재전송. 명시적으로 미실행으로 유지하고 결과를 추정하지 않습니다.
+
+**보존:** 기존 1~9단계 `decide(request)` 다섯 필드·`RULE_IDS` 세 개, `src/detect.mjs`, 메모·공지 DB, 기존 감사 기록. `judgeIssuer`와 서버 전용 비밀값을 변경하거나 공개하지 않습니다. 제출 묶음에는 비공개 메모 본문을 포함하지 않습니다.
