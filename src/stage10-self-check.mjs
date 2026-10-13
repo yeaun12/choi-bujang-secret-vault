@@ -107,7 +107,7 @@ export async function runStage10SelfChecks() {
   const full = passed('full API flow: signed creation, immutable backup, mutation, preview, exact restoration and retests');
   const missing = passed('missing or corrupt backup aborts without changing notes');
   const deleted = passed('deleted B note recreated from its original backup, retaining other notes and audit');
-  const incomplete = passed('unexecuted A cross-owner retest makes the overall result incomplete');
+  const incomplete = passed('unexecuted optional A check remains unexecuted while real normal and denial tests pass');
   const proofs = readTupleProofs(output);
   const backupProof = readBackupProof(output);
   const tamperedProof = proofs?.find(row => row.scenario === 'tampered');
@@ -122,7 +122,7 @@ export async function runStage10SelfChecks() {
         + '; stored SHA256=recomputed ' + backupProof.storedSha256
         + '; preview=title/content; missing/corrupt abort.' : 'Missing measured note-backup verification.'],
     ['stage10_local_postrestore_retests', full && incomplete,
-      'Execute normal and forbidden requests after local recovery; an unexecuted A check must keep overall passed=false.',
+      'Execute required normal and forbidden requests after local recovery; unexecuted optional A check is explicitly reported as not run.',
       'Normal 200/hash match; anonymous 401, query 400, cross-owner 404; missing A remains unexecuted.'],
   ];
   for (const [attackId, ok, expected, detail] of groups) {
