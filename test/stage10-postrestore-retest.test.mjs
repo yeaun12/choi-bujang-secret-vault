@@ -49,7 +49,7 @@ test('actual after-restore HTTP normal/denied requests are separately recorded',
     ['/api/notes/' + noteId, true], ['/api/notes/' + foreignId, true],
   ]);
   assert.deepEqual(demo.events.map(x => x.event_kind),
-    ['retest_passed', 'retest_passed', 'retest_passed', 'retest_passed']);
+    ['restore_verified', 'restore_verified', 'restore_verified', 'restore_verified']);
   assert.ok(demo.events.every(e => e.owner_id === noteScopeOwnerId(B)));
   assert.equal(JSON.stringify(demo.events).includes('restored text'), false);
   assert.equal(JSON.stringify(demo.events).includes('testsignature'), false);
@@ -62,7 +62,7 @@ test('anonymous access allowed causes a real failed retest, never a pass', async
   });
   assert.equal(r.passed, false);
   assert.ok(r.results.some(x => x.check === 'anonymous_denied' && x.result === 'failed'));
-  assert.ok(demo.events.some(x => x.event_kind === 'retest_failed'));
+  assert.ok(demo.events.some(x => x.event_kind === 'restore_failed'));
 });
 test('wrong content hash after restore fails a real normal GET check', async () => {
   const demo = setup({ content: 'still corrupted' });
@@ -81,7 +81,8 @@ test('missing judge A fixture is explicitly marked unexecuted, never passed', as
     requestUrl, configuredAppUrl, ...demo,
   });
   assert.equal(r.results.at(-1).result, 'not_run_no_verified_a_note');
-  assert.equal(demo.events.at(-1).event_kind, 'retest_skipped');
+  assert.equal(demo.events.at(-1).event_kind, 'restore_rejected');
+  assert.equal(demo.events.at(-1).reason_code, 'retest_foreign_not_run_no_a_note');
   assert.equal(demo.requests.length, 3);
 });
 test('untrusted user-controlled host or HTTP origin never receives the bearer', async () => {
@@ -99,4 +100,21 @@ test('untrusted user-controlled host or HTTP origin never receives the bearer', 
     requestUrl: 'https://evil.vercel.app/api/restore', configuredAppUrl, ...demo,
   }), /stage10_untrusted_retest_origin/u);
   assert.equal(demo.requests.length, 0);
+});
+
+test('audit writes fit existing stage 10 DB constraints; no migration required', async () => {
+  const validKinds = new Set([
+    'backup_created', 'backup_rejected',
+    'restore_requested', 'restore_rejected', 'restore_applied',
+    'restore_verified', 'restore_failed',
+  ]);
+  const demo = setup({ foreign: null });
+  await runPostRestoreHttpRetests({
+    identity: B, noteId, expectedSha256, authorization: auth,
+    requestUrl, configuredAppUrl, ...demo,
+  });
+  assert.equal(demo.events.length, 4);
+  assert.ok(demo.events.every(x => validKinds.has(x.event_kind)));
+  assert.ok(demo.events.every(x => /^retest_[a-z0-9_]{1,57}$/u.test(x.reason_code)));
+  assert.equal(demo.events.at(-1).event_kind, 'restore_rejected');
 });

@@ -96,15 +96,18 @@ export async function runPostRestoreHttpRetests({
     }
     // Append-only persisted evidence: outcomes and status only.
     await repository.appendAudit({
-      ...meta, event_kind: passed ? 'retest_passed' : 'retest_failed',
-      reason_code: name + '_' + (status ?? 'network') + '_' + (passed ? 'pass' : 'fail'),
+      // Reuse existing database-approved audit event kinds. The retest_
+      // prefix preserves an unambiguous record of what actually ran.
+      ...meta, event_kind: passed ? 'restore_verified' : 'restore_failed',
+      reason_code: 'retest_' + name + '_' + (status ?? 'network') +
+        '_' + (passed ? 'pass' : 'fail'),
     });
     results.push({ check: name, status, result: passed ? 'passed' : 'failed' });
   }
   if (!calls.some(x => x.name === 'foreign_denied')) {
     await repository.appendAudit({
-      ...meta, event_kind: 'retest_skipped',
-      reason_code: 'foreign_not_run_no_a_note',
+      ...meta, event_kind: 'restore_rejected',
+      reason_code: 'retest_foreign_not_run_no_a_note',
     });
     results.push({ check: 'foreign_denied', status: null,
       result: 'not_run_no_verified_a_note' });

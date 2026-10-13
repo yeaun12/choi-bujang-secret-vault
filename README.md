@@ -466,3 +466,11 @@ git status --short
 - 배포 식별, 빌드, 자기 점검의 허용 단계를 10까지 확장했습니다. `judgeIssuer`, `identityProvider`, `originalApiUrl`, `publicAppUrl`, 실제 `src/decider.mjs`의 기존 RULE_IDS와 `src/detect.mjs`는 변경하지 않았습니다.
 - `npm run bundle`에서 기록하는 공격 점검은 비인증 `/data.json`·메모·공지 API와 비인증 **POST `/api/restore`**의 실제 HTTP 응답 7건입니다. 이것만으로 심판 B 복구 성공을 증명하지 않습니다.
 - **저장점 미검증:** 실제 B 최초 백업 생성·변조·삭제·한 건 복원과 그 후 1~9단계 실시간 공격 재전송. 최종 배포와 로컬 재시험 후 수행 여부만 갱신해야 합니다. 실제 실행 없이 성공으로 기록하지 않습니다.
+
+
+### 10단계 사후 재시험 감사 기록 (추가 수정)
+
+- 실제 복구 POST가 성공하면 해당 배포의 `/api/notes/:id`로 정상 조회, 비인증 조회 거부, 쿼리 우회 거부를 HTTP로 재시험합니다. 시험 A의 메모가 검증 가능한 경우 B의 A 메모 접근 거부도 확인합니다.
+- HTTP 결과(상태 코드와 성공·실패)를 기존 `stage10_restore_audit`의 허용된 `event_kind`(`restore_verified`/`restore_failed`/`restore_rejected`)에 **`retest_` 접두어가 붙은 `reason_code`**로 기록합니다. 자료 본문·토큰은 기록하지 않습니다. 검증 불가능한 A 자료 교차시험은 `retest_foreign_not_run_no_a_note`로 **미실행** 표시합니다.
+- 기존 DB `event_kind` 제약조건, RLS, 테이블 및 데이터는 변경하지 않습니다. 새 사건 종류 추가를 위한 SQL 마이그레이션은 필요하지 않으며 적용하지 않습니다.
+- 주의: 사후 재시험은 실제 시험 B의 복구가 성공해야 실행됩니다. 로컬 테스트에서 가짜 HTTP 응답을 사용한 경우 운영 HTTP 검증 완료로 취급하지 않습니다.
