@@ -49,5 +49,7 @@
 
 현재 실제 DB에는 백업의 내용 SHA-256 CHECK 제약과 `(judge_run_id, note_id)` 기본 키가 있습니다. 그러나 현재 B 생성 경로는 `notes` INSERT, `stage10_note_backups` INSERT/재조회, `stage10_restore_audit` INSERT가 **별도 서버-DB 왕복 요청**입니다. 백업 실패 시 새 메모를 조건부 삭제하는 방어는 구현했지만, 동시 수정·네트워크 중단·감사 저장 실패까지 아우르는 데이터베이스 트랜잭션이 아닙니다.
 
-`db/stage10-atomic-b-creation.sql`은 세 쓰기를 PostgreSQL 함수 호출 하나로 묶는 **미적용 초안**입니다. 배포에 반영하려면 운영 DB 함수 생성 권한 및 실행 권한 검토, Supabase SQL 트랜잭션 시험, B API의 RPC 호출 전환, 기존 테스트 대체 저장소 업데이트와 공식 판정 경로 점검이 필요합니다. **함수 정의 파일만 추가한 현재 커밋에서 운영 B 생성 흐름은 바뀌지 않았습니다.** 승인 없이 운영 DB에 이 SQL을 실행하지 않습니다.
+`db/stage10-atomic-b-creation.sql`은 메모·사본·감사 쓰기를 하나의 PostgreSQL 함수 호출로 묶는 **미적용 SQL**입니다. 작업 브랜치에서는 `api/notes/index.js`의 공식 B 메모 생성이 `src/stage10-atomic-create.mjs`의 RPC 어댑터를 사용하도록 변경했습니다. 함수가 설치되지 않았거나 실패하면 **비원자적 INSERT로 돌아가지 않고 503을 반환**합니다. 그 대신 학생과 심판 A의 기존 생성 경로는 유지합니다.
+
+`test/stage10-api-flow.test.mjs`는 자체 시험 저장소에서 함수의 원자적 성공·백업 실패·감사 실패·중복 ID 처리를 재현합니다. `test/stage10-atomic-create.test.mjs`는 인증된 B와 요청 소유자 결합 및 함수 부재 시 거부를 검사합니다. 이는 **테스트용 구현이며 실제 PostgreSQL RPC 실행 증거가 아닙니다**. 운영 Supabase에는 아직 `public.stage10_create_b_note`가 없고, 기존 운영 `main` 배포도 그대로입니다. SQL 적용/독립 DB 시험과 새 브랜치의 전체 테스트가 통과하기 전에는 이 브랜치를 배포하지 않습니다.
 
