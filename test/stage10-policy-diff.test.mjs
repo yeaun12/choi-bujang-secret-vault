@@ -8,6 +8,9 @@ import {
 test('stage 10 task 1: passed safe blob is intact and only the approved restore route was added', () => {
   const safe = readVerifiedSafePolicy();
   const current = readTestPolicy();
+  // Git's verified blob uses LF; a Windows checkout may use CRLF.
+  // Normalize line endings only. Every policy statement must still match.
+  const normalizedCurrent = current.replace(/\r\n/gu, '\n');
   assert.equal(SAFE_POLICY_PROVENANCE.blob.length, 40);
 
   // The safe policy from stages 8 and 9 must remain byte-for-byte identical
@@ -23,9 +26,9 @@ test('stage 10 task 1: passed safe blob is intact and only the approved restore 
     "  }",
     "",
   ].join('\n');
-  assert.equal(current.split(approvedAddition).length, 2,
+  assert.equal(normalizedCurrent.split(approvedAddition).length, 2,
     'The exact approved recovery rule must occur once.');
-  assert.equal(current.replace(approvedAddition, ''), safe,
+  assert.equal(normalizedCurrent.replace(approvedAddition, ''), safe,
     'Unexpected change to the stage 8/9 verified access policy.');
 
   const result = comparePolicyText(safe, current);
