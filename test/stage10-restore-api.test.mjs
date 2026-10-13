@@ -85,8 +85,11 @@ test('retest reports normal/forbidden kinds and keeps unexecuted checks as not r
     requestUrl: 'https://choi-bujang-secret-vault-blush.vercel.app/api/restore',
     configuredAppUrl: 'https://choi-bujang-secret-vault-blush.vercel.app/',
     repository: db.repository,
-    fetchImpl: async (url, init) => (init.headers.Authorization && !String(url).includes('?')
-      ? Response.json({ id, body: 'safe' }) : new Response('', { status: statusFor(String(url)) })),
+    fetchImpl: async (url, init) => (!init.headers.Authorization
+      ? new Response('', { status: 401 })
+      : String(url).includes('?') ? new Response('', { status: 400 })
+        : String(url).endsWith(id) ? Response.json({ id, body: 'safe' })
+          : new Response('', { status: 404 })),
   });
   assert.equal(out.passed, true);
   assert.equal(out.complete, true);
@@ -95,5 +98,6 @@ test('retest reports normal/forbidden kinds and keeps unexecuted checks as not r
     ['normal_read', 'normal', 'passed'],
     ['anonymous_denied', 'forbidden', 'passed'],
     ['query_rejected', 'forbidden', 'passed'],
+    ['missing_denied', 'forbidden', 'passed'],
   ]);
 });
