@@ -180,9 +180,36 @@ test('full API flow: signed creation, immutable backup, mutation, preview, exact
   assert.deepEqual(tables.notes.filter(note => note.id !== b), preserved);
   assert.deepEqual(tables.stage10_note_backups.find(note => note.note_id === b), backup);
   assert.deepEqual(tables.stage10_restore_audit.slice(0, priorAudits.length), priorAudits);
-  assert.equal((await call('GET', '/api/notes/' + a, tokenA)).status, 200);
-  assert.equal((await call('GET', '/api/notes/' + a, tokenB)).status, 404);
-  assert.equal((await call('GET', '/api/notes/' + other, tokenB)).status, 200);
+  // Exercise normal AND forbidden actions after restoring B, not just before.
+  // The response's retest summary alone does not prove old protections survive.
+  const postRestore = {
+    aOwnRead: (await call('GET', '/api/notes/' + a, tokenA)).status,
+    bOwnRead: (await call('GET', '/api/notes/' + b, tokenB)).status,
+    bOtherOwnRead: (await call('GET', '/api/notes/' + other, tokenB)).status,
+    bReadA: (await call('GET', '/api/notes/' + a, tokenB)).status,
+    aReadB: (await call('GET', '/api/notes/' + b, tokenA)).status,
+    aUpdateB: (await call('PUT', '/api/notes/' + b, tokenA,
+      { title: 'unauthorized change', body: 'must not reach B' })).status,
+    aDeleteB: (await call('DELETE', '/api/notes/' + b, tokenA)).status,
+    anonymousReadB: (await call('GET', '/api/notes/' + b, null)).status,
+  };
+  assert.deepEqual(postRestore, {
+    aOwnRead: 200, bOwnRead: 200, bOtherOwnRead: 200,
+    bReadA: 404, aReadB: 404, aUpdateB: 404, aDeleteB: 404,
+    anonymousReadB: 401,
+  }, 'Prior authentication and per-note authorization must still hold after recovery');
+  assert.equal(sha256(tables.notes.find(note => note.id === b).content),
+    backup.content_sha256, 'Forbidden updates must never corrupt the restored B note');
+  assert.deepEqual(tables.notes.filter(note => note.id !== b), preserved);
+  const retestAudit = tables.stage10_restore_audit.filter(event =>
+    typeof event.reason_code === 'string' && event.reason_code.startsWith('retest_'));
+  assert.equal(retestAudit.length, 5, 'Every post-restore result needs a retained audit event');
+  assert.ok(retestAudit.every(event => event.event_kind === 'restore_verified'
+    && event.reason_code.endsWith('_pass')));
+  t.diagnostic('STAGE10_POSTRESTORE_PROOF ' + JSON.stringify({
+    scope: 'local_synthetic', postRestore, persistedRetestEvents: retestAudit.length,
+    otherNotesPreserved: true, restoredBHashMatchesBackup: true,
+  }));
   const reloadedBackup = tables.stage10_note_backups.find(note => note.note_id === b);
   assert.ok(backupReadsByNote.get(b) >= 2);
   t.diagnostic('STAGE10_BACKUP_PROOF ' + JSON.stringify({
