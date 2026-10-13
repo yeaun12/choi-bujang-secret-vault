@@ -16,7 +16,9 @@ test('stage 9 task 1: valid practice events normalize into approved fields', () 
     { atMs: Date.parse('2026-10-01T00:00:00.000Z'), method: 'POST', subject: 'learner_fixture' },
   ]);
   assert.deepEqual(detect([event()]), { action: 'observe' });
-  assert.deepEqual(detect(Array.from({ length: 121 }, () => event())), { action: 'observe' });
+  assert.deepEqual(detect(Array.from({ length: 121 }, () => event())), {
+    action: 'propose_revocation', reasonCode: 'burst_read', subject: 'learner_fixture',
+  });
 });
 
 test('stage 9 task 1: untrusted metadata never enters normalized output', () => {

@@ -58,7 +58,10 @@ test('stage 9 task 2: spoofed network/device metadata is never considered truste
   assert.deepEqual(findReadBurstCandidate(tampered), {
     subject: 'learner_fixture', reasonCode: 'burst_read',
   });
-  // This is a candidate only. There is still no device-level revocation.
-  assert.deepEqual(detect(tampered), { action: 'observe' });
+  // Only the verified subject and burst count determine the practice proposal.
+  // No unverified device is revoked; spoofed network/device strings are ignored.
+  assert.deepEqual(detect(tampered), {
+    action: 'propose_revocation', reasonCode: 'burst_read', subject: 'learner_fixture',
+  });
   assert.deepEqual(detect(reads(30)), { action: 'observe' });
 });

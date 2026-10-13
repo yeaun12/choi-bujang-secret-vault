@@ -63,9 +63,16 @@ export function findReadBurstCandidate(events) {
   return null;
 }
 
+// Stage 9, task 3: report a separate proposal; never revoke sessions or
+// modify the earlier access decision. The practice contract has no verified
+// device ID, so it requires a pseudonymous subject instead of a device target.
 export function detect(events) {
-  // Stage 3 will define the separate decision/proposal result. Until then,
-  // detecting a burst candidate never revokes a device or changes access.
-  findReadBurstCandidate(events);
-  return { action: 'observe' };
+  const candidate = findReadBurstCandidate(events);
+  if (candidate === null) return { action: 'observe' };
+
+  return {
+    action: 'propose_revocation',
+    reasonCode: candidate.reasonCode,
+    subject: candidate.subject,
+  };
 }
