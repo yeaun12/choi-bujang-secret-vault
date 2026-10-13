@@ -1,6 +1,7 @@
 // Stage 10: actual post-restore HTTP request checks.
 // Never print or persist bearer tokens or note bodies. Only outcomes/statuses
 // and content SHA-256 comparison are kept in append-only metadata audit.
+import { randomUUID } from 'node:crypto';
 import { sha256, isJudgeB } from './stage10-note-recovery.mjs';
 import { noteScopeOwnerId } from './resource-api-auth.mjs';
 
@@ -27,15 +28,16 @@ export function permittedRetestOrigin(requestUrl, configuredAppUrl, deploymentHo
 }
 
 const RETEST_KIND = { normal_read: 'normal', anonymous_denied: 'forbidden',
-  query_rejected: 'forbidden', foreign_denied: 'forbidden' };
+  query_rejected: 'forbidden', missing_denied: 'forbidden', foreign_denied: 'forbidden' };
 const RETEST_REQUEST = {
   normal_read: 'GET /api/notes/:id as B (restored note)',
   anonymous_denied: 'GET /api/notes/:id without login',
   query_rejected: 'GET /api/notes/:id?owner_id=… as B',
+  missing_denied: 'GET /api/notes/:id of non-existent note as B',
   foreign_denied: "GET /api/notes/:id of A's note as B",
 };
 const RETEST_EXPECTED = { normal_read: '200 and body SHA-256 equals backup',
-  anonymous_denied: '401', query_rejected: '400', foreign_denied: '404' };
+  anonymous_denied: '401', query_rejected: '400', missing_denied: '404', foreign_denied: '404' };
 
 export async function runPostRestoreHttpRetests({
   identity, noteId, expectedSha256, authorization, requestUrl,
@@ -75,11 +77,19 @@ export async function runPostRestoreHttpRetests({
     foreignId = null; // Missing A-zone fixture is explicitly unexecuted.
   }
 
+  // This denial case is always executable, even when no judge-A fixture
+  // exists. It is not labelled as an A/foreign-owner access test.
+  let absentNoteId = randomUUID();
+  while (absentNoteId === noteId || await repository.findNoteById(absentNoteId)) {
+    absentNoteId = randomUUID();
+  }
   const calls = [
     { name: 'normal_read', url: itemUrl, authenticated: true },
     { name: 'anonymous_denied', url: itemUrl, authenticated: false },
     { name: 'query_rejected',
       url: new URL(itemUrl.href + '?owner_id=unexpected'), authenticated: true },
+    { name: 'missing_denied', url: new URL('/api/notes/' + absentNoteId, origin),
+      authenticated: true },
   ];
   if (foreignId && UUID.test(foreignId) && foreignId !== noteId) {
     calls.push({ name: 'foreign_denied',
@@ -102,6 +112,8 @@ export async function runPostRestoreHttpRetests({
       passed = status === 401;
     } else if (name === 'query_rejected') {
       passed = status === 400;
+    } else if (name === 'missing_denied') {
+      passed = status === 404;
     } else if (name === 'foreign_denied') {
       passed = status === 404;
     }
