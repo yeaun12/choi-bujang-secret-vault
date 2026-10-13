@@ -1,7 +1,7 @@
 name: Stage 10 judge-audience regression
 on:
   push:
-    branches: [main, stage10-judge-audience-diagnostic]
+    branches: [main, stage10-judge-audience-diagnostic, stage10-unv-retest-evidence]
   workflow_dispatch:
 permissions:
   contents: read
