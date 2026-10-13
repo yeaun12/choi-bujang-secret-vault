@@ -80,7 +80,11 @@ test('missing judge A fixture is explicitly marked unexecuted, never passed', as
     identity: B, noteId, expectedSha256, authorization: auth,
     requestUrl, configuredAppUrl, ...demo,
   });
-  assert.equal(r.results.at(-1).result, 'not_run_no_verified_a_note');
+  assert.equal(r.results.length, 3);
+  assert.equal(r.skipped[0].reason, 'not_run_no_verified_a_note');
+  assert.equal(r.executed, 3);
+  assert.equal(r.passedCount, 3);
+  assert.equal(r.failedCount, 0);
   assert.equal(r.passed, true, 'All executed mandatory requests really passed');
   assert.equal(r.complete, true);
   assert.equal(demo.events.at(-1).event_kind, 'restore_rejected');
