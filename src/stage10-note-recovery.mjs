@@ -121,6 +121,30 @@ export async function backupBeforeJudgeBMutation({ identity, note, repository })
   return captureAndVerify(identity, note, repository, 'before_note_mutation', true);
 }
 
+// PostgreSQL timestamptz can return +00:00 while a JS fixture uses Z.
+// Both represent the same instant; never mutate a healthy row solely
+// because PostgreSQL's date string formatting differs.
+export function sameStoredInstant(first, second) {
+  if (typeof first !== 'string' || typeof second !== 'string') return false;
+  const a = Date.parse(first);
+  const b = Date.parse(second);
+  return Number.isFinite(a) && Number.isFinite(b) && a === b;
+}
+
+// Validate re-read snapshots, including content/title/ID/owner and provenance
+// fields. Do not rely on metadata-only checks or log sensitive contents.
+function sameStoredBackup(first, second) {
+  return first.judge_run_id === second.judge_run_id &&
+    first.identity_label === second.identity_label &&
+    first.note_id === second.note_id &&
+    first.owner_id === second.owner_id &&
+    first.title === second.title &&
+    first.content === second.content &&
+    first.content_sha256 === second.content_sha256 &&
+    sameStoredInstant(first.note_created_at, second.note_created_at) &&
+    sameStoredInstant(first.captured_at, second.captured_at);
+}
+
 export async function restoreOneJudgeBNote({ identity, noteId, repository }) {
   if (!isJudgeB(identity)) return { status: 403, code: 'judge_b_required' };
   if (typeof noteId !== 'string' || !UUID.test(noteId)) {
@@ -148,8 +172,16 @@ export async function restoreOneJudgeBNote({ identity, noteId, repository }) {
     await audit('restore_rejected', 'owner_conflict');
     return { status: 409, code: 'owner_conflict' };
   }
-  const fields = { id, owner_id: owner, title: backup.title, content: backup.content,
-    created_at: backup.note_created_at };
+  // Re-read the private snapshot immediately before any write. If it
+  // disappeared or any protected value changed, do not restore a single byte.
+  const backupAgain = await repository.findBackup(meta);
+  if (!validateBackup(identity, id, backupAgain)
+      || !sameStoredBackup(backup, backupAgain)) {
+    await audit('restore_rejected', 'backup_changed_before_restore');
+    return { status: 409, code: 'backup_changed_before_restore' };
+  }
+  const fields = { id, owner_id: owner, title: backupAgain.title, content: backupAgain.content,
+    created_at: backupAgain.note_created_at };
   let mode = 'unchanged';
   if (!current) {
     const created = await repository.insertOwnedNote(fields);
@@ -159,7 +191,7 @@ export async function restoreOneJudgeBNote({ identity, noteId, repository }) {
     }
     mode = 'recreated';
   } else if (current.title !== fields.title || current.content !== fields.content
-      || current.created_at !== fields.created_at) {
+      || !sameStoredInstant(current.created_at, fields.created_at)) {
     const changed = await repository.updateOwnedNote(fields);
     if (!changed || changed.id !== id || changed.owner_id !== owner) {
       await audit('restore_failed', 'update_conflict');
@@ -169,15 +201,15 @@ export async function restoreOneJudgeBNote({ identity, noteId, repository }) {
   }
   // Verify real DB row again, never claim success merely because write returned.
   const verified = await repository.findNoteById(id);
-  if (!verified || verified.id !== id || verified.owner_id !== owner
-      || verified.title !== backup.title
-      || verified.created_at !== backup.note_created_at
+  if (!verified || verified.id !== backupAgain.note_id || verified.owner_id !== backupAgain.owner_id
+      || verified.title !== backupAgain.title
+      || !sameStoredInstant(verified.created_at, backupAgain.note_created_at)
       || typeof verified.content !== 'string'
-      || sha256(verified.content) !== backup.content_sha256) {
+      || sha256(verified.content) !== backupAgain.content_sha256) {
     await audit('restore_failed', 'postrestore_mismatch');
     return { status: 503, code: 'postrestore_mismatch' };
   }
-  await audit('restore_verified', mode, backup.content_sha256);
-  return { status: 200, noteId: id, ownerId: owner,
-    contentSha256: backup.content_sha256, mode };
+  await audit('restore_verified', mode, backupAgain.content_sha256);
+  return { status: 200, noteId: verified.id, ownerId: verified.owner_id,
+    contentSha256: sha256(verified.content), mode };
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   isJudgeB, sha256, snapshotFromCreatedNote,
   backupCreatedJudgeBNote, backupBeforeJudgeBMutation,
-  readVerifiedBackup, restoreOneJudgeBNote,
+  readVerifiedBackup, restoreOneJudgeBNote, sameStoredInstant,
 } from '../src/stage10-note-recovery.mjs';
 import { noteScopeOwnerId } from '../src/resource-api-auth.mjs';
 
@@ -172,4 +172,64 @@ test('before-mutation capture refuses missing or invalid DB read-back; A not eli
     identity: A, note: original, repository: db.repository,
   });
   assert.deepEqual(ignored, { skipped: true });
+});
+
+test('Postgres timestamptz Z versus +00:00 does not cause a spurious restore mismatch', async () => {
+  const db = memory({
+    current: { ...original, created_at: '2026-10-01T00:00:00+00:00' },
+    backup: { ...snapshot(), note_created_at: created_at,
+      captured_at: '2026-10-01T00:01:00+00:00' },
+  });
+  let writes = 0;
+  const repo = {
+    ...db.repository,
+    updateOwnedNote: async () => { writes++; throw new Error('unnecessary_write'); },
+    insertOwnedNote: async () => { writes++; throw new Error('unnecessary_write'); },
+  };
+  const result = await restoreOneJudgeBNote({ identity: B, noteId: id, repository: repo });
+  assert.equal(result.status, 200);
+  assert.equal(result.mode, 'unchanged');
+  assert.equal(writes, 0);
+  assert.equal(sameStoredInstant(created_at, db.row.created_at), true);
+});
+
+test('tampered or missing backup on second read aborts before a write', async () => {
+  for (const drift of [null, { ...snapshot(), content: 'changed' }]) {
+    const db = memory({ current: { ...original, content: 'injured' }, backup: snapshot() });
+    let reads = 0, writes = 0;
+    const repo = {
+      ...db.repository,
+      findBackup: async () => ++reads === 1 ? snapshot() : drift,
+      updateOwnedNote: async () => { writes++; throw new Error('unsafe_write'); },
+      insertOwnedNote: async () => { writes++; throw new Error('unsafe_write'); },
+    };
+    const result = await restoreOneJudgeBNote({ identity: B, noteId: id, repository: repo });
+    assert.equal(result.status, 409);
+    assert.equal(result.code, 'backup_changed_before_restore');
+    assert.equal(writes, 0);
+    assert.equal(db.row.content, 'injured');
+    assert.deepEqual(db.audits.map(x => x.event_kind),
+      ['restore_requested', 'restore_rejected']);
+  }
+});
+
+test('post-restore verification fails if stored ID, owner or content differ', async () => {
+  const badContents = [
+    { id: '123e4567-e89b-42d3-a456-426614174003' },
+    { owner_id: noteScopeOwnerId(A) },
+    { content: 'not recovered' },
+  ];
+  for (const wrong of badContents) {
+    const db = memory({ current: { ...original, content: 'injured' },
+      backup: snapshot() });
+    const repo = {
+      ...db.repository,
+      findNoteById: async () => ({ ...db.row, ...wrong }),
+    };
+    const result = await restoreOneJudgeBNote({ identity: B, noteId: id, repository: repo });
+    // The wrong-owner variant can correctly fail even before attempting a write.
+    assert.ok([409, 503].includes(result.status));
+    assert.notEqual(result.status, 200);
+    assert.ok(db.audits.some(x => x.event_kind !== 'restore_verified'));
+  }
 });
