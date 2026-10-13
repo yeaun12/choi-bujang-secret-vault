@@ -474,3 +474,10 @@ git status --short
 - HTTP 결과(상태 코드와 성공·실패)를 기존 `stage10_restore_audit`의 허용된 `event_kind`(`restore_verified`/`restore_failed`/`restore_rejected`)에 **`retest_` 접두어가 붙은 `reason_code`**로 기록합니다. 자료 본문·토큰은 기록하지 않습니다. 검증 불가능한 A 자료 교차시험은 `retest_foreign_not_run_no_a_note`로 **미실행** 표시합니다.
 - 기존 DB `event_kind` 제약조건, RLS, 테이블 및 데이터는 변경하지 않습니다. 새 사건 종류 추가를 위한 SQL 마이그레이션은 필요하지 않으며 적용하지 않습니다.
 - 주의: 사후 재시험은 실제 시험 B의 복구가 성공해야 실행됩니다. 로컬 테스트에서 가짜 HTTP 응답을 사용한 경우 운영 HTTP 검증 완료로 취급하지 않습니다.
+
+### 10단계 심판 JWT 대상 주소 진단 및 보완
+
+- 기존 서버 인증은 `aleph.config.json.publicAppUrl`에 설정된 고정 도메인만 JWT의 `aud`로 받았지만, 실제 `/aleph.json`의 `publicAppUrl`은 Vercel 배포별 `VERCEL_URL`로 생성됩니다. 두 주소가 다를 때 유효한 심판 JWT가 API 진입 전에 거부될 수 있습니다.
+- JWT의 **서명(ES256), 등록된 judgeIssuer, 만료, run ID, A/B 구분, 서명된 sub** 검사는 유지합니다. 허용 대상은 기존 고정 도메인과, 사용자가 조작하는 Host 헤더가 아닌 **Vercel 플랫폼 환경변수 `VERCEL_URL`** 중 저장소 프로젝트 이름 규칙에 맞는 배포 호스트만입니다.
+- 진단 재현: `node --test test/stage10-judge-audience.test.mjs`. 정상 심판 B 토큰을 두 주소로 검증하고 타 프로젝트 주소는 거부합니다. 기존 1~9단계·10단계 정책/복구 회귀 및 로컬 빌드는 별도 CI에서도 검사했습니다.
+- **운영 한계:** 이전 공식 심판의 실패 원인은 심판 토큰·상태코드가 제공되지 않아 확정되지 않았습니다. 이 보완 전 실제 `stage10_note_backups`와 `stage10_restore_audit`가 모두 0건이었습니다. 재심판 후 기록·복구 ID/소유자/해시·사후 실제 HTTP 테스트를 확인해야 최종 통과로 표시합니다. 기존 데이터는 임의로 변경하지 않습니다.
