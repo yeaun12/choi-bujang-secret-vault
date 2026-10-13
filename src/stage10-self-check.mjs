@@ -100,12 +100,13 @@ export async function runStage10SelfChecks() {
       'test/stage10-api-flow.test.mjs',
     ], { cwd: root, env: childEnv, timeout: 30000, maxBuffer: 1024 * 1024, windowsHide: true });
     output = run.stdout;
-    suitePassed = /^# tests 6\s*$/mu.test(output) && /^# fail 0\s*$/mu.test(output);
+    suitePassed = /^# tests 7\s*$/mu.test(output) && /^# fail 0\s*$/mu.test(output);
   } catch { /* Local execution failures are failed checks, not fabricated passes. */ }
   const passed = name => suitePassed && output.split('\n')
     .some(line => line.startsWith('ok ') && line.endsWith(' - ' + name));
   const full = passed('full API flow: signed creation, immutable backup, mutation, preview, exact restoration and retests');
   const missing = passed('missing or corrupt backup aborts without changing notes');
+  const failedCreation = passed('failed judge B backup rejects creation and removes unchanged unbacked note');
   const deleted = passed('deleted B note recreated from its original backup, retaining other notes and audit');
   const incomplete = passed('unexecuted optional A check remains unexecuted while real normal and denial tests pass');
   const proofs = readTupleProofs(output);
@@ -116,8 +117,8 @@ export async function runStage10SelfChecks() {
     && backupProof.storedSha256 === tamperedProof.backup.contentSha256;
   const tuple = row => 'id=' + row.id + '; owner=' + row.ownerId + '; sha256=' + row.contentSha256;
   const groups = [
-    ['stage10_local_backup_readback', full && missing && backupBound,
-      'Re-read the stored synthetic B snapshot; missing/corrupt backups must abort before writes.',
+    ['stage10_local_backup_readback', full && missing && failedCreation && backupBound,
+      'Re-read the stored synthetic B snapshot; missing/corrupt backups and failed creation must leave no unprotected new note.',
       backupProof ? 'snapshot reads=' + backupProof.snapshotReads + '; version=' + backupProof.version
         + '; stored SHA256=recomputed ' + backupProof.storedSha256
         + '; preview=title/content; missing/corrupt abort.' : 'Missing measured note-backup verification.'],
