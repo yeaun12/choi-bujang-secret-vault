@@ -366,11 +366,39 @@ npm run build -- --local
 
 ### 미검증 사항
 
-- 공식 8단계 심판 접수·통과는 아직 수행하지 않았습니다. 공식 엔진의 `reasonCode` 등록부를 별도로 확인해야 하며, 현재 `resource_access_denied`의 등록 여부는 검증되지 않았습니다.
+- 2026-10-13 공식 8단계 심판은 커밋 `22ba9421e469`에서 통과했습니다. 이 항목의 이전 미검증 기록은 통과 전 상태였습니다. 단, 엔진 reasonCode 등록부 자체는 별도로 조회하지 않았습니다.
 - `src/attack-check.mjs`의 자동 점검은 비인증 공개 파일·메모·공지 경로만 검사합니다. A/B 소유권 및 강사 권한의 실제 HTTP 테스트는 수동으로 수행했으며 제출 묶음 생성 때 사용자의 로그인 토큰을 재사용하지 않습니다.
 
 ### 8단계 구역 규칙 보완 · 전체 목록 판정 거부
 
 공식 심판 커밋 `c7507158cd5b`에서 48/100, `S08_OTHER_ZONE_ALLOWED`가 발생했고, 심판이 **판정기의 메모 전체 목록 허용이나 공지·강사 자료 쓰기 허용**을 지적했습니다. 검토 결과 판정기는 `GET /api/notes` 및 `GET /notes` 전체 목록 경로를 `allow`로 분류하고 있었습니다. 이 두 경로와 잘못된 목록 동작은 판정기에서 거부합니다. 메모 생성에 필요한 `POST /api/notes`만 유지합니다.
 
-단건 UUID 메모는 기존처럼 경로를 정확히 검사하고 실제 소유권은 서버 API의 검증된 사용자·저장된 `owner_id` 필터에서 최종 확인합니다. 학생의 공지 쓰기 거부, 공지 읽기, 등록된 기기 검사, 7단계 가상 재인증 흐름은 변경하지 않았습니다. 실제 웹의 자기 메모 목록 조회 API도 변경하지 않았습니다. 공식 심판 결과는 재제출 후에만 확정할 수 있습니다.
+단건 UUID 메모는 기존처럼 경로를 정확히 검사하고 실제 소유권은 서버 API의 검증된 사용자·저장된 `owner_id` 필터에서 최종 확인합니다. 학생의 공지 쓰기 거부, 공지 읽기, 등록된 기기 검사, 7단계 가상 재인증 흐름은 변경하지 않았습니다. 실제 웹의 자기 메모 목록 조회 API도 변경하지 않았습니다. 커밋 `22ba9421e469`에서 공식 8단계 심판 통과를 확인했습니다.
+
+## 9단계 저장점: 도플갱어 탐지 및 회수 제안 (2026-10-13)
+
+8단계 공식 통과 커밋 `22ba9421e469`을 기반으로 9단계 탐지 함수를 구현했습니다. 기존 `src/decider.mjs`의 기기 등록·추가 인증·자원 경로 규칙, 로그인, 메모/공지 API, DB 및 XDR 보너스는 변경하지 않았습니다.
+
+- 제작 1: 공식 로컬 사건의 `at`, `method`, `identity.sub`만 추출하고, 메모 본문·토큰·실명·임의 기기/역할 주장을 보존하거나 기록하지 않습니다.
+- 제작 2: 동일 가명 사용자가 **이동하는 10분 내 GET 120건을 초과**할 때 `burst_read` 후보를 탐지합니다. 정확히 120건, 다른 사용자의 요청, POST, 시간 구간 밖 요청은 탐지하지 않습니다.
+- 제작 3: 탐지되면 기존 접근 판정과 별도로 `{action:'propose_revocation',reasonCode:'burst_read',subject:'가명 사용자'}`를 반환합니다. 정상 사건은 `{action:'observe'}`입니다. 회수 API를 만들거나 세션·기기의 실제 권한을 변경하지 않습니다.
+
+**입력 계약의 제약:** 9단계 카드에는 낯선 네트워크+대량 조회 복합 신호와 확인된 기기 하나에 대한 회수 제안이 있지만, 현재 제공된 `docs/DETECT_EVENTS.md` 및 `scripts/detect-test.mjs` 가상 사건에는 네트워크·검증된 기기 ID·판정 결과가 없습니다. 임의 필드로 기기를 결정하지 않고 로컬 공식 계약의 `identity.sub`만 결과로 반환합니다. 실제 엔진의 기기 회수, 회수 이후 세션 차단, 소요 시간과 공식 심판 통과는 아직 확인되지 않았습니다.
+
+`aleph.config.json`의 `step`을 9로 올렸으며 기존 `judgeIssuer`, `identityProvider`, `allowedRoutes`, `originalApiUrl`, 운영 사이트 URL은 변경하지 않았습니다. 9단계도 빌드·배포 식별·기존 비인증 HTTP 자기 점검을 지원합니다. 자기 점검 6건은 **실제로 보낸 HTTP 요청**만 기록하고, 가상 탐지 결과를 HTTP 방어 성공으로 표현하지 않습니다.
+
+### 재현 및 제출
+
+```cmd
+node --test test/stage9-detect-input.test.mjs test/stage9-burst-rule.test.mjs test/stage9-proposal.test.mjs
+npm run detect:test
+npm run decider:test
+npm run fixture:7
+npm run test:r5
+npm run build -- --local
+git status --short
+```
+
+제작 1~3의 로컬 탐지 테스트 11/11, `detect:test` 6/6, 기존 회귀 테스트 12/12는 저장점 직전 사용자 CMD에서 확인했습니다. 이번 설정·빌드 지원 변경 이후의 재검증은 별도로 필요합니다.
+
+`bundle-notes.json`은 Git에서 제외되는 로컬 파일이며 최소 `explanation` 10자 이상이 필요합니다. 커밋 반영 후 `npm run bundle`은 실측된 비인증 HTTP 결과와 커밋 정보를 `artifacts/submission.json`에 기록합니다. 두 JSON은 Git에 커밋하지 않습니다.

@@ -22,9 +22,9 @@ async function hasJsonError(response) {
 }
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(config.step)) {
     throw new Error(
-      'src/attack-check.mjs currently supports stages 1 through 8.'
+      'src/attack-check.mjs currently supports stages 1 through 9.'
     );
   }
 
@@ -228,10 +228,11 @@ export async function runAttackChecks(config) {
     },
   ];
 
-  // Stage 8 self-check: only safe anonymous HTTP requests; never use account tokens.
+  // Stages 8-9: only real anonymous HTTP requests, never account tokens.
+  // Stage 9 local detection proposals are separately tested with detect:test.
   // Cross-owner and instructor write checks were performed manually and are not
   // re-enacted with credentials by the submission bundle.
-  if (config.step === 8) {
+  if (config.step === 8 || config.step === 9) {
     const noticeGet = await fetch(new URL('/api/instructor-notices', app), {
       redirect: 'error',
       signal: AbortSignal.timeout(10000),

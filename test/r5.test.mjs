@@ -324,3 +324,51 @@ test('stage 8 self-check records anonymous notice denials without account tokens
     globalThis.fetch = originalFetch;
   }
 });
+
+test('deployment identity supports stage 9 with existing route metadata', () => {
+  const config = {
+    ...baseConfig, step: 9,
+    allowedRoutes: [...baseConfig.allowedRoutes,
+      'GET /api/instructor-notices', 'POST /api/instructor-notices',
+      'GET /api/instructor-notices/:id', 'PUT /api/instructor-notices/:id'],
+    originalApiUrl: 'https://student-project.supabase.co/rest/v1/notes',
+  };
+  const result = deploymentIdentity(env, config);
+  assert.equal(result.step, 9);
+  assert.equal(result.schema, 'aleph.defense.deployment.v1');
+  assert.deepEqual(result.allowedRoutes, config.allowedRoutes);
+  assert.equal(result.judgeIssuer, config.judgeIssuer);
+  assert.equal(result.originalApiUrl, config.originalApiUrl);
+});
+
+test('stage 9 self-check preserves observed anonymous HTTP checks', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  try {
+    globalThis.fetch = async (url, init = {}) => {
+      const path = new URL(url).pathname;
+      const method = init.method ?? 'GET';
+      requests.push([path, method, init.headers?.Authorization ?? null]);
+      if (path === '/data.json') return new Response('Not Found', { status: 404 });
+      return new Response(JSON.stringify({ error: 'Authentication required.' }), {
+        status: 401, headers: { 'content-type': 'application/json' },
+      });
+    };
+    const attempts = await runAttackChecks({ ...baseConfig, step: 9 });
+    assert.equal(attempts.length, 6);
+    assert.deepEqual(requests.map(([path, method]) => [path, method]), [
+      ['/data.json', 'GET'],
+      ['/api/notes', 'GET'],
+      ['/api/notes', 'POST'],
+      ['/api/notes', 'GET'],
+      ['/api/instructor-notices', 'GET'],
+      ['/api/instructor-notices', 'POST'],
+    ]);
+    assert.ok(requests.every(([, , auth]) =>
+      auth === null || auth === 'Bearer bad.token.value'));
+    assert.ok(attempts.every(item => /HTTP (401|404)/u.test(item.observed)));
+    assert.equal(attempts.some(item => item.attackId.includes('revocation')), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
