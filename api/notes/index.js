@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import config from '../../aleph.config.json' with { type: 'json' };
 import { createLoginVerifier } from '../../src/verify-login.mjs';
-import { isExactNoteCollection, isOwnedNoteList } from '../../src/resource-api-auth.mjs';
+import { isExactNoteCollection, isOwnedNoteList, noteScopeOwnerId } from '../../src/resource-api-auth.mjs';
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -80,7 +80,7 @@ export async function GET(request) {
   const { data, error } = await supabase
     .from('notes')
     .select('id, title, content, created_at, owner_id')
-    .eq('owner_id', auth.identity.userId)
+    .eq('owner_id', noteScopeOwnerId(auth.identity))
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -134,7 +134,7 @@ export async function POST(request) {
   }
 
   const note = {
-    owner_id: auth.identity.userId,
+    owner_id: noteScopeOwnerId(auth.identity),
     title,
     content: body,
   };
