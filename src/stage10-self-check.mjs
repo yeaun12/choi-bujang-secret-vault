@@ -51,6 +51,27 @@ export function readBackupProof(output) {
   return proof;
 }
 
+// Parse measured, post-recovery API and audit evidence; never infer it from a test name.
+export function readPostRestoreProof(output) {
+  const found = output.split('\n').map(line =>
+    /^\s*# STAGE10_POSTRESTORE_PROOF (.+)$/u.exec(line)).filter(Boolean);
+  if (found.length !== 1) return null;
+  let proof;
+  try { proof = JSON.parse(found[0][1]); } catch { return null; }
+  const expected = {
+    aOwnRead: 200, bOwnRead: 200, bOtherOwnRead: 200,
+    bReadA: 404, aReadB: 404, aUpdateB: 404, aDeleteB: 404,
+    anonymousReadB: 401,
+  };
+  if (proof?.scope !== 'local_synthetic' || !proof.postRestore
+      || Object.keys(proof.postRestore).sort().join(',') !== Object.keys(expected).sort().join(',')
+      || Object.entries(expected).some(([key, status]) => proof.postRestore[key] !== status)
+      || proof.persistedRetestEvents !== 5
+      || proof.otherNotesPreserved !== true
+      || proof.restoredBHashMatchesBackup !== true) return null;
+  return proof;
+}
+
 export async function runStage10SelfChecks() {
   const checks = [];
   let policyVerified = false;
@@ -111,6 +132,7 @@ export async function runStage10SelfChecks() {
   const incomplete = passed('unexecuted optional A check remains unexecuted while real normal and denial tests pass');
   const proofs = readTupleProofs(output);
   const backupProof = readBackupProof(output);
+  const postRestoreProof = readPostRestoreProof(output);
   const tamperedProof = proofs?.find(row => row.scenario === 'tampered');
   const backupBound = backupProof && tamperedProof && backupProof.id === tamperedProof.backup.id
     && backupProof.ownerId === tamperedProof.backup.ownerId
@@ -122,9 +144,13 @@ export async function runStage10SelfChecks() {
       backupProof ? 'snapshot reads=' + backupProof.snapshotReads + '; version=' + backupProof.version
         + '; stored SHA256=recomputed ' + backupProof.storedSha256
         + '; preview=title/content; missing/corrupt abort.' : 'Missing measured note-backup verification.'],
-    ['stage10_local_postrestore_retests', full && incomplete,
+    ['stage10_local_postrestore_retests', full && incomplete && postRestoreProof,
       'Execute required normal and forbidden requests after local recovery; unexecuted optional A check is explicitly reported as not run.',
-      'Normal 200/hash match; anonymous 401, query 400, cross-owner 404; missing A remains unexecuted.'],
+      postRestoreProof
+        ? 'After restore A/B own reads 200; cross-owner read/update/delete 404; anonymous read 401; '
+          + postRestoreProof.persistedRetestEvents + ' persisted retest events; other notes kept; '
+          + 'missing A in an independent fixture remains unexecuted.'
+        : 'Measured cross-user post-restore read/write denial and audit evidence missing.'],
   ];
   for (const [attackId, ok, expected, detail] of groups) {
     checks.push({ attackId, expected,
