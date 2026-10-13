@@ -151,11 +151,15 @@ export async function POST(request) {
       retest: {
         passed: retest.passed,
         complete: retest.complete,
+        executed: retest.executed,
+        passedCount: retest.passedCount,
+        failedCount: retest.failedCount,
         normal: retest.results.filter(x => x.kind === 'normal'),
         forbidden: retest.results.filter(x => x.kind === 'forbidden'),
-        notRun: retest.results.filter(x => x.result.startsWith('not_run'))
-          .map(x => x.check),
+        notRun: retest.skipped.map(x => x.check),
+        skipped: retest.skipped,
       },
+      // Only executed HTTP responses are listed as retests.
       retests: retest.results,
     });
   } catch {
