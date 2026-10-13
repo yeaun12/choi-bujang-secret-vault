@@ -5,6 +5,22 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const BEARER = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/u;
+const DEPLOYMENT_HOST = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.vercel\.app$/u;
+
+// Only Vercel's system-provided deployment hostname may extend the trusted
+// judge audience. Never derive this from request Host, Origin or forwarded headers.
+function verifiedDeploymentAudience(config, deploymentHost) {
+  if (typeof deploymentHost !== 'string' || !DEPLOYMENT_HOST.test(deploymentHost)) return null;
+  try {
+    const repo = new URL(config.repoUrl);
+    if (repo.origin !== 'https://github.com' || repo.search || repo.hash) return null;
+    const names = repo.pathname.split('/').filter(Boolean);
+    if (names.length !== 2 || !/^[a-z0-9][a-z0-9-]*$/u.test(names[1])) return null;
+    // Vercel-generated deployment URLs are prefixed with the exact project/repo slug.
+    if (!deploymentHost.startsWith(names[1] + '-')) return null;
+    return deploymentHost;
+  } catch { return null; }
+}
 
 function httpsUrl(value, path) {
   if (typeof value !== 'string' || value !== value.trim()) throw new TypeError('invalid_login_issuer');
@@ -21,7 +37,7 @@ function httpsUrl(value, path) {
   return url;
 }
 
-function verifiedConfig(config) {
+function verifiedConfig(config, deploymentHost) {
   const judge = httpsUrl(config?.judgeIssuer, '/defense/judge');
   const app = httpsUrl(config?.publicAppUrl, '/');
   if (!app.hostname.endsWith('.vercel.app')) throw new TypeError('invalid_login_app_origin');
@@ -32,16 +48,18 @@ function verifiedConfig(config) {
       || !/^[a-zA-Z0-9._:-]{1,120}$/u.test(config.identityProvider.audience)) {
     throw new TypeError('invalid_student_identity_provider');
   }
+  const deploymentAudience = verifiedDeploymentAudience(config, deploymentHost);
+  const judgeAudiences = [...new Set([app.hostname, deploymentAudience].filter(Boolean))];
   return { judgeIssuer: judge.href, judgeJwksUrl: `${judge.href}/.well-known/jwks.json`,
-    audience: app.hostname, studentIssuer: student.href,
+    judgeAudiences, studentIssuer: student.href,
     studentAudience: config.identityProvider.audience, studentUrl: student.origin };
 }
 
 // Create once in the server runtime. The judge intake separately compares the
 // checked-in judgeIssuer to its registered operator issuer before any attack.
 export function createLoginVerifier({ config, supabaseSecretKey, judgeKeySet,
-  supabaseClient } = {}) {
-  const bound = verifiedConfig(config);
+  supabaseClient, deploymentHost = process.env.VERCEL_URL } = {}) {
+  const bound = verifiedConfig(config, deploymentHost);
   if (!supabaseClient && (typeof supabaseSecretKey !== 'string'
       || !supabaseSecretKey.trim() || supabaseSecretKey !== supabaseSecretKey.trim())) {
     throw new TypeError('missing_supabase_secret_key');
@@ -65,10 +83,10 @@ export function createLoginVerifier({ config, supabaseSecretKey, judgeKeySet,
     if (issuer === bound.judgeIssuer) {
       try {
         const { payload, protectedHeader } = await jwtVerify(token, keys, {
-          issuer: bound.judgeIssuer, audience: bound.audience, algorithms: ['ES256'],
+          issuer: bound.judgeIssuer, audience: bound.judgeAudiences, algorithms: ['ES256'],
           maxTokenAge: '15 minutes', clockTolerance: 5,
         });
-        if (protectedHeader.alg !== 'ES256' || payload.aud !== bound.audience
+        if (protectedHeader.alg !== 'ES256' || !bound.judgeAudiences.includes(payload.aud)
             || !UUID_V4.test(payload.sub ?? '') || !UUID_V4.test(payload.aleph_run ?? '')
             || payload.aleph_role !== 'judge'
             || !['a', 'b'].includes(payload.aleph_identity)
