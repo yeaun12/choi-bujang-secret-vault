@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import config from '../../aleph.config.json' with { type: 'json' };
 import { traceStage8Access } from '../../src/stage8-access-trace.mjs';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
-import { isJudgeB, backupCreatedJudgeBNote } from '../../src/stage10-note-recovery.mjs';
-import { stage10Repository } from '../../src/stage10-recovery-repository.mjs';
+import { isJudgeB } from '../../src/stage10-note-recovery.mjs';
+import { createJudgeBNoteAtomic } from '../../src/stage10-atomic-create.mjs';
 import { isExactNoteCollection, isOwnedNoteList, noteScopeOwnerId } from '../../src/resource-api-auth.mjs';
 
 const UUID =
@@ -150,11 +150,25 @@ export async function POST(request) {
     note.id = id;
   }
 
+  // Judge B: note, verified immutable backup and audit are a single DB RPC.
+  // Never use the ordinary INSERT as a fallback when that RPC is unavailable.
+  if (isJudgeB(auth.identity)) {
+    const result = await createJudgeBNoteAtomic({ identity: auth.identity,
+      note, database: supabase });
+    if (result.status !== 201) {
+      if (result.status === 409) {
+        traceStage8Access(auth.identity, 'note_create', 'duplicate_id', 409);
+        return jsonError(409, 'A note with that id already exists.');
+      }
+      console.info(JSON.stringify({ stage10_backup: result.code, status: 503 }));
+      return jsonError(503, 'Safe note creation is unavailable.');
+    }
+    traceStage8Access(auth.identity, 'note_create', 'created', 201);
+    return jsonResponse({ id: result.id }, 201);
+  }
+
   const { data, error } = await supabase
-    .from('notes')
-    .insert(note)
-    .select(isJudgeB(auth.identity) ? 'id, owner_id, title, content, created_at' : 'id')
-    .single();
+    .from('notes').insert(note).select('id').single();
 
   if (error) {
     if (error.code === '23505') {
@@ -164,21 +178,6 @@ export async function POST(request) {
 
     traceStage8Access(auth.identity, 'note_create', 'db_error', 500);
     return jsonError(500, 'Note could not be created.');
-  }
-
-  // Stage 10: capture B's original signed-judge note immediately on creation.
-  // Never backfill an older or already modified note via GET/PUT/restore.
-  // The backup table is insert-only, and failures are never silently ignored.
-  if (isJudgeB(auth.identity)) {
-    try {
-      await backupCreatedJudgeBNote({
-        identity: auth.identity, note: data,
-        repository: stage10Repository(supabase),
-      });
-    } catch {
-      traceStage8Access(auth.identity, 'note_create', 'backup_failed', 503);
-      return jsonError(503, 'Note created but safe backup could not be verified.');
-    }
   }
 
   traceStage8Access(auth.identity, 'note_create', 'created', 201);

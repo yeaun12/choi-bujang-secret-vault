@@ -15,12 +15,61 @@ const identityA = { ...identityB, identity: 'a' };
 const originalContent = 'Synthetic original B fixture';
 const tables = { notes: [], stage10_note_backups: [], stage10_restore_audit: [] };
 let backupReads = 0, server, baseUrl, tokenA, tokenB;
+let failNextBackupInsert = false;
+let failNextAuditInsert = false;
 const backupReadsByNote = new Map();
 const oldUrl = process.env.SUPABASE_URL;
 const oldKey = process.env.SUPABASE_SECRET_KEY;
 
-// Implements the adapter's table filtering/immutability, not recovery logic.
-const database = { from(table) {
+// Implements storage filtering and the atomic RPC transaction boundary.
+const database = {
+  rpc(name, input) {
+    return { async single() {
+      if (name !== 'stage10_create_b_note') {
+        return { data: null, error: { code: '42883' } };
+      }
+      // A DB transaction either commits every row or rolls everything back.
+      // This is a synthetic model; it is not a live PostgreSQL RPC test.
+      const before = structuredClone(tables);
+      try {
+        const now = new Date().toISOString();
+        const id = input.p_note_id ?? randomUUID();
+        if (tables.notes.some(note => note.id === id)) {
+          return { data: null, error: { code: '23505' } };
+        }
+        const note = { id, owner_id: input.p_owner_id, title: input.p_title,
+          content: input.p_content, created_at: now };
+        tables.notes.push(note);
+        if (failNextBackupInsert) {
+          failNextBackupInsert = false;
+          throw new Error('synthetic_backup_insert_failure');
+        }
+        const snapshot = { judge_run_id: input.p_judge_run_id,
+          identity_label: 'b', note_id: id, owner_id: note.owner_id,
+          title: note.title, content: note.content,
+          note_created_at: note.created_at, content_sha256: sha256(note.content),
+          captured_at: now };
+        tables.stage10_note_backups.push(snapshot);
+        // Simulate an independent, verified SELECT readback within the transaction.
+        backupReads++;
+        backupReadsByNote.set(id, (backupReadsByNote.get(id) ?? 0) + 1);
+        assert.equal(snapshot.content_sha256, sha256(snapshot.content));
+        if (failNextAuditInsert) {
+          failNextAuditInsert = false;
+          throw new Error('synthetic_audit_insert_failure');
+        }
+        tables.stage10_restore_audit.push({ judge_run_id: input.p_judge_run_id,
+          identity_label: 'b', note_id: id, owner_id: note.owner_id,
+          event_kind: 'backup_created', reason_code: 'initial_created_note',
+          content_sha256: snapshot.content_sha256, occurred_at: now });
+        return { data: { note_id: id, owner_id: note.owner_id }, error: null };
+      } catch {
+        for (const table of Object.keys(before)) tables[table] = before[table];
+        return { data: null, error: { code: 'P0001' } };
+      }
+    } };
+  },
+  from(table) {
   assert.ok(Object.hasOwn(tables, table));
   let operation = 'select', fields, limit = Infinity, columns = '*';
   const filters = [];
@@ -39,6 +88,10 @@ const database = { from(table) {
   async function execute(single) {
     if (table === 'stage10_note_backups' && operation === 'select') backupReads++;
     if (operation === 'insert') {
+      if (table === 'stage10_note_backups' && failNextBackupInsert) {
+        failNextBackupInsert = false;
+        return { data: null, error: { code: 'synthetic_backup_storage_error' } };
+      }
       const now = new Date().toISOString();
       const value = structuredClone(fields);
       if (table === 'notes') { value.id ??= randomUUID(); value.created_at ??= now; }
@@ -127,7 +180,7 @@ async function call(method, path, token = tokenB, body) {
   });
   return { status: response.status, body: await response.json() };
 }
-function reset() { for (const table of Object.keys(tables)) tables[table] = []; backupReads = 0; backupReadsByNote.clear(); }
+function reset() { for (const table of Object.keys(tables)) tables[table] = []; backupReads = 0; failNextBackupInsert = false; failNextAuditInsert = false; backupReadsByNote.clear(); }
 async function seed() {
   reset();
   const a = randomUUID(), b = randomUUID(), other = randomUUID();
@@ -175,9 +228,36 @@ test('full API flow: signed creation, immutable backup, mutation, preview, exact
   assert.deepEqual(tables.notes.filter(note => note.id !== b), preserved);
   assert.deepEqual(tables.stage10_note_backups.find(note => note.note_id === b), backup);
   assert.deepEqual(tables.stage10_restore_audit.slice(0, priorAudits.length), priorAudits);
-  assert.equal((await call('GET', '/api/notes/' + a, tokenA)).status, 200);
-  assert.equal((await call('GET', '/api/notes/' + a, tokenB)).status, 404);
-  assert.equal((await call('GET', '/api/notes/' + other, tokenB)).status, 200);
+  // Exercise normal AND forbidden actions after restoring B, not just before.
+  // The response's retest summary alone does not prove old protections survive.
+  const postRestore = {
+    aOwnRead: (await call('GET', '/api/notes/' + a, tokenA)).status,
+    bOwnRead: (await call('GET', '/api/notes/' + b, tokenB)).status,
+    bOtherOwnRead: (await call('GET', '/api/notes/' + other, tokenB)).status,
+    bReadA: (await call('GET', '/api/notes/' + a, tokenB)).status,
+    aReadB: (await call('GET', '/api/notes/' + b, tokenA)).status,
+    aUpdateB: (await call('PUT', '/api/notes/' + b, tokenA,
+      { title: 'unauthorized change', body: 'must not reach B' })).status,
+    aDeleteB: (await call('DELETE', '/api/notes/' + b, tokenA)).status,
+    anonymousReadB: (await call('GET', '/api/notes/' + b, null)).status,
+  };
+  assert.deepEqual(postRestore, {
+    aOwnRead: 200, bOwnRead: 200, bOtherOwnRead: 200,
+    bReadA: 404, aReadB: 404, aUpdateB: 404, aDeleteB: 404,
+    anonymousReadB: 401,
+  }, 'Prior authentication and per-note authorization must still hold after recovery');
+  assert.equal(sha256(tables.notes.find(note => note.id === b).content),
+    backup.content_sha256, 'Forbidden updates must never corrupt the restored B note');
+  assert.deepEqual(tables.notes.filter(note => note.id !== b), preserved);
+  const retestAudit = tables.stage10_restore_audit.filter(event =>
+    typeof event.reason_code === 'string' && event.reason_code.startsWith('retest_'));
+  assert.equal(retestAudit.length, 5, 'Every post-restore result needs a retained audit event');
+  assert.ok(retestAudit.every(event => event.event_kind === 'restore_verified'
+    && event.reason_code.endsWith('_pass')));
+  t.diagnostic('STAGE10_POSTRESTORE_PROOF ' + JSON.stringify({
+    scope: 'local_synthetic', postRestore, persistedRetestEvents: retestAudit.length,
+    otherNotesPreserved: true, restoredBHashMatchesBackup: true,
+  }));
   const reloadedBackup = tables.stage10_note_backups.find(note => note.note_id === b);
   assert.ok(backupReadsByNote.get(b) >= 2);
   t.diagnostic('STAGE10_BACKUP_PROOF ' + JSON.stringify({
@@ -263,4 +343,42 @@ test('empty POST selects exactly one damaged B snapshot and restores it', async 
   assert.equal(result.status, 200);
   assert.equal(result.body.id, b);
   assert.equal(result.body.contentSha256, sha256(originalContent));
+});
+
+// A failed backup must not silently leave a new B note without any safe snapshot.
+test('failed judge B backup rolls back note, backup and audit atomically', async () => {
+  const { a, other } = await seed();
+  const notesBefore = structuredClone(tables.notes);
+  const backupsBefore = structuredClone(tables.stage10_note_backups);
+  const auditsBefore = structuredClone(tables.stage10_restore_audit);
+  const failedId = randomUUID();
+  failNextBackupInsert = true;
+  const result = await call('POST', '/api/notes', tokenB,
+    { id: failedId, title: 'synthetic rejected creation', body: 'do not retain without backup' });
+  assert.equal(result.status, 503);
+  assert.equal(tables.notes.some(note => note.id === failedId), false);
+  assert.deepEqual(tables.notes, notesBefore, 'Unrelated A and B notes must not change');
+  assert.deepEqual(tables.stage10_note_backups, backupsBefore, 'Previous safe backups must remain');
+  assert.deepEqual(tables.stage10_restore_audit, auditsBefore, 'Previous audits must remain');
+  assert.equal((await call('GET', '/api/notes/' + a, tokenA)).status, 200);
+  assert.equal((await call('GET', '/api/notes/' + other, tokenB)).status, 200);
+});
+
+test('failed judge B audit insertion rolls back note and backup atomically', async () => {
+  await seed();
+  const before = structuredClone(tables);
+  failNextAuditInsert = true;
+  const result = await call('POST', '/api/notes', tokenB,
+    { id: randomUUID(), title: 'synthetic audit rollback', body: 'atomic rollback' });
+  assert.equal(result.status, 503);
+  assert.deepEqual(tables, before, 'No note or backup may survive an audit insert failure');
+});
+
+test('duplicate judge B note ID preserves previous snapshots and audit', async () => {
+  const { b } = await seed();
+  const before = structuredClone(tables);
+  const result = await call('POST', '/api/notes', tokenB,
+    { id: b, title: 'synthetic duplicate', body: 'must not overwrite' });
+  assert.equal(result.status, 409);
+  assert.deepEqual(tables, before);
 });
