@@ -88,6 +88,8 @@ const NOTE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 const NOTE_ITEM_METHODS = new Set(['GET', 'PUT', 'DELETE']);
 const NOTE_COLLECTION_METHODS = new Set(['GET', 'POST']);
 const AUTH_METHODS = new Set(['POST', 'PUT', 'DELETE']);
+const NOTICE_COLLECTION_METHODS = new Set(['GET', 'POST']);
+const NOTICE_ITEM_METHODS = new Set(['GET', 'PUT']);
 
 export function classifyResourceRoute(request) {
   if (request?.service !== 'notes' ||
@@ -104,6 +106,21 @@ export function classifyResourceRoute(request) {
   if (path === '/api/auth' && AUTH_METHODS.has(method) &&
       route === `${method} /api/auth`) {
     return { zone: 'auth', resourceId: 'auth:session' };
+  }
+
+  // 강사 공지는 독립된 경로로 식별합니다. 서버 API에서 강사 등록을 재확인합니다.
+  if (path === '/api/instructor-notices' &&
+      NOTICE_COLLECTION_METHODS.has(method) &&
+      route === `${method} /api/instructor-notices`) {
+    return { zone: 'instructor_notice', resourceId: 'instructor_notice:collection' };
+  }
+  if (path.startsWith('/api/instructor-notices/') &&
+      NOTICE_ITEM_METHODS.has(method) &&
+      route === `${method} /api/instructor-notices/:id`) {
+    const id = path.slice('/api/instructor-notices/'.length);
+    if (NOTE_UUID.test(id)) {
+      return { zone: 'instructor_notice', resourceId: `instructor_notice:${id.toLowerCase()}` };
+    }
   }
 
   for (const prefix of ['/api/notes', '/notes']) {
@@ -132,7 +149,7 @@ export function classifyResourceRoute(request) {
     }
   }
 
-  // 강사 공지는 검증된 강사 역할과 실제 API가 없으므로 fail-closed 합니다.
+  // 공지 수정의 강사 권한 검사는 서버 DB에서 재확인합니다.
   // /notes/export처럼 자원과 기능이 충돌하는 경로도 열지 않습니다.
   return null;
 }
