@@ -193,7 +193,7 @@ export async function POST(request) {
       console.info(JSON.stringify({
         stage10_backup: 'capture_failed', status: 503, cleanup,
       }));
-      return jsonError(503, 'Safe backup could not be verified; creation rejected.');
+      return jsonError(503, 'Safe backup could not be verified.');
     }
   }
 
