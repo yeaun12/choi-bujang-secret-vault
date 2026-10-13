@@ -74,6 +74,40 @@ export async function readVerifiedBackup(identity, noteId, repository) {
   return stored;
 }
 
+// A self-consistent backup row (content + SHA-256) is insufficient proof:
+// an attacker might replace BOTH fields. Compare against the separately
+// recorded hash from the original creation audit before approving restore.
+// This is an independent DB record, not an HMAC or immutable offsite log.
+export async function verifyOriginalBackupAudit({ identity, noteId, repository }) {
+  if (!isJudgeB(identity) || typeof noteId !== 'string' || !UUID.test(noteId)) {
+    return { verified: false, reason: 'invalid_backup_identity' };
+  }
+  const meta = {
+    judge_run_id: identity.runId.toLowerCase(), identity_label: 'b',
+    note_id: noteId.toLowerCase(), owner_id: noteScopeOwnerId(identity),
+  };
+  const snapshots = await repository.findBackupCreationProofs(meta);
+  if (!Array.isArray(snapshots) || snapshots.length !== 1) {
+    return { verified: false, reason: 'backup_creation_proof_missing_or_ambiguous' };
+  }
+  const proof = snapshots[0];
+  if (!proof || proof.judge_run_id !== meta.judge_run_id
+      || proof.identity_label !== 'b' || proof.note_id !== meta.note_id
+      || proof.owner_id !== meta.owner_id || proof.event_kind !== 'backup_created'
+      || !['initial_created_note', 'before_note_mutation'].includes(proof.reason_code)
+      || !SHA256.test(proof.content_sha256 ?? '')) {
+    return { verified: false, reason: 'backup_creation_proof_invalid' };
+  }
+  // The audit alone cannot prove the backup was not changed; re-read the
+  // backup from storage as a SEPARATE SELECT and verify both origins agree.
+  const backup = await repository.findBackup(meta);
+  if (!validateBackup(identity, noteId, backup)
+      || backup.content_sha256 !== proof.content_sha256) {
+    return { verified: false, reason: 'backup_creation_digest_mismatch' };
+  }
+  return { verified: true, reason: 'backup_creation_audit_matches', contentSha256: backup.content_sha256 };
+}
+
 function matchesOriginal(snapshot, original) {
   return snapshot.title === original.title &&
     snapshot.content_sha256 === original.content_sha256 &&

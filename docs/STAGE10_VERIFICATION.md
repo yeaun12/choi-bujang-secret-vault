@@ -45,11 +45,11 @@
 
 `stage10_local_restore_tuple_match`의 `expected`에는 이번 실행에서 읽은 합성 B 사본의 `id`, `owner`, `sha256`을, `observed`에는 이번 실행에서 복원한 행의 세 값을 넣습니다. 값 누락·형식 오류·중복 시나리오·불일치면 점검 실패입니다. 로컬 대체 저장소 시험이라는 문구를 유지하며 실제 운영 복구 성공으로 바꾸지 않습니다.
 
-## 운영 DB 원자성 점검 (제안, 미적용)
+## 운영 DB 원자성 검증 (2026-10-14 기준)
 
-현재 실제 DB에는 백업의 내용 SHA-256 CHECK 제약과 `(judge_run_id, note_id)` 기본 키가 있습니다. 그러나 현재 B 생성 경로는 `notes` INSERT, `stage10_note_backups` INSERT/재조회, `stage10_restore_audit` INSERT가 **별도 서버-DB 왕복 요청**입니다. 백업 실패 시 새 메모를 조건부 삭제하는 방어는 구현했지만, 동시 수정·네트워크 중단·감사 저장 실패까지 아우르는 데이터베이스 트랜잭션이 아닙니다.
-
-`db/stage10-atomic-b-creation.sql`은 메모·사본·감사 쓰기를 하나의 PostgreSQL 함수 호출로 묶는 **미적용 SQL**입니다. 작업 브랜치에서는 `api/notes/index.js`의 공식 B 메모 생성이 `src/stage10-atomic-create.mjs`의 RPC 어댑터를 사용하도록 변경했습니다. 함수가 설치되지 않았거나 실패하면 **비원자적 INSERT로 돌아가지 않고 503을 반환**합니다. 그 대신 학생과 심판 A의 기존 생성 경로는 유지합니다.
-
-`test/stage10-api-flow.test.mjs`는 자체 시험 저장소에서 함수의 원자적 성공·백업 실패·감사 실패·중복 ID 처리를 재현합니다. `test/stage10-atomic-create.test.mjs`는 인증된 B와 요청 소유자 결합 및 함수 부재 시 거부를 검사합니다. 이는 **테스트용 구현이며 실제 PostgreSQL RPC 실행 증거가 아닙니다**. 운영 Supabase에는 아직 `public.stage10_create_b_note`가 없고, 기존 운영 `main` 배포도 그대로입니다. 함수 적용 후 별도 검증용 DB에서 `test/stage10-atomic-db-rollback.sql`을 한 트랜잭션으로 실행하면 생성된 메모/사본/감사 한 건 일치, 동일 ID 중복 거부, 익명 역할의 함수 실행 권한 부재를 검사하고 마지막에 `ROLLBACK`합니다. 이 SQL 파일은 아직 실행하지 않았습니다. SQL 적용/독립 DB 시험과 새 브랜치의 전체 테스트가 통과하기 전에는 이 브랜치를 배포하지 않습니다.
-
+- 운영 Supabase에 `public.stage10_create_b_note(uuid,uuid,text,text,uuid)` 설치 확인, `service_role` 실행 허용, `anon`·`authenticated` 실행 차단 확인.
+- DB 함수는 B 메모 생성, 비공개 사본 저장·재조회 및 최초 `backup_created` 감사 기록을 한 트랜잭션 안에서 생성합니다. `test/stage10-atomic-db-rollback.sql` 전체를 실행해 ID/소유자/내용 해시, 중복 생성 차단 및 함수 권한을 검증했습니다. 이후 기존 메모 5건, 백업 0건, 감사 0건을 확인했습니다. 이는 합성 DB 데이터의 ROLLBACK 시험이며 공식 B의 실제 복구를 입증하지 않습니다.
+- 로컬 `npm run test:stage10` 64/64와 `npm run bundle` 실행 확인 후 이전 PR #4가 `main`에 병합됐습니다. 10단계 공식 심판의 커밋 `0ea5eb8defcc` 재판정에서는 삭제 복구와 1~9단계 재시험 몬스터는 격파, **변조 메모의 백업 검증만 `S10_BACKUP_UNVERIFIED`로 실패**했습니다.
+- 이 결과에 따라 새 `stage10-backup-audit-proof` 브랜치는 **백업 본문과 해시를 동시에 고친 경우에도** 최초 `backup_created` 감사 기록의 별도 SHA-256 증거를 읽어 대조하도록 구성했습니다. 메모 복원 전에 한 번, 복구 호출 직전에 한 번 더 확인합니다. 감사 기록이 없거나 중복되거나 사본과 다르면 복원하지 않습니다.
+- 해당 감사 기록은 백업 테이블과 분리된 저장 증거이지만 **동일 DB에 존재**합니다. 둘을 함께 조작할 수 있는 권한자에 대한 HMAC/오프사이트 무결성 보장은 아닙니다. 심판이 사용하는 B 사전 사본의 확보 방법 역시 판정 로그 없이는 확정할 수 없습니다.
+- 새 브랜치의 자동 테스트는 아직 사용자의 PC에서 재실행되지 않았습니다. 공식 심판 판정 역시 미실행입니다. 결과를 확인하기 전에는 성공을 주장하지 않습니다.

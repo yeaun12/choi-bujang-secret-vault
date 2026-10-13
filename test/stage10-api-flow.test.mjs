@@ -209,6 +209,8 @@ test('full API flow: signed creation, immutable backup, mutation, preview, exact
   assert.equal(result.status, 200);
   assert.equal(result.body.ownerId, backup.owner_id, 'Response owner must equal the stored backup owner');
   assert.equal(result.body.backup.ownerId, backup.owner_id);
+  assert.equal(result.body.backup.creationAuditVerified, true);
+  assert.equal(result.body.backup.creationAuditRereadBeforeRestore, true);
   assert.equal(result.body.id, backup.note_id);
   assert.equal(result.body.contentSha256, backup.content_sha256);
   assert.equal(result.body.match.all, true);
@@ -362,6 +364,45 @@ test('failed judge B backup rolls back note, backup and audit atomically', async
   assert.deepEqual(tables.stage10_restore_audit, auditsBefore, 'Previous audits must remain');
   assert.equal((await call('GET', '/api/notes/' + a, tokenA)).status, 200);
   assert.equal((await call('GET', '/api/notes/' + other, tokenB)).status, 200);
+});
+
+test('self-consistent but rewritten B backup is rejected against original audit', async () => {
+  const { b } = await seed();
+  assert.equal((await call('PUT', '/api/notes/' + b, tokenB,
+    { title: 'attacked', body: 'current note modified by attacker' })).status, 200);
+  const notesBeforeRestore = structuredClone(tables.notes);
+  const originalProof = tables.stage10_restore_audit.find(a =>
+    a.note_id === b && a.event_kind === 'backup_created');
+  const snapshot = tables.stage10_note_backups.find(row => row.note_id === b);
+  assert.ok(originalProof && snapshot);
+  snapshot.content = 'tampered backup with a matching replacement digest';
+  snapshot.content_sha256 = sha256(snapshot.content);
+  assert.equal(snapshot.content_sha256, sha256(snapshot.content));
+  assert.notEqual(snapshot.content_sha256, originalProof.content_sha256);
+  const result = await call('POST', '/api/restore', tokenB, { noteId: b });
+  assert.equal(result.status, 409);
+  assert.equal(result.body.error, 'backup_origin_not_verified');
+  assert.equal(result.body.restored, false);
+  assert.deepEqual(tables.notes, notesBeforeRestore, 'No note may be altered after backup provenance failure');
+  assert.equal(originalProof.content_sha256, sha256(originalContent));
+  assert.ok(tables.stage10_restore_audit.some(a =>
+    a.note_id === b && a.event_kind === 'restore_rejected'
+      && a.reason_code === 'backup_origin_not_verified'));
+});
+
+test('missing creation audit denies restore even when snapshot hash matches', async () => {
+  const { b } = await seed();
+  assert.equal((await call('PUT', '/api/notes/' + b, tokenB,
+    { title: 'attacked', body: 'modified text' })).status, 200);
+  const before = structuredClone(tables.notes);
+  tables.stage10_restore_audit = tables.stage10_restore_audit.filter(a =>
+    !(a.note_id === b && a.event_kind === 'backup_created'));
+  const snapshot = tables.stage10_note_backups.find(row => row.note_id === b);
+  assert.equal(snapshot.content_sha256, sha256(snapshot.content));
+  const result = await call('POST', '/api/restore', tokenB, { noteId: b });
+  assert.equal(result.status, 409);
+  assert.equal(result.body.error, 'backup_origin_not_verified');
+  assert.deepEqual(tables.notes, before);
 });
 
 test('failed judge B audit insertion rolls back note and backup atomically', async () => {

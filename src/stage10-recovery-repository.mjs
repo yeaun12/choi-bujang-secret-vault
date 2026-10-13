@@ -17,6 +17,15 @@ export function stage10Repository(database) {
         .eq('judge_run_id', judge_run_id).eq('identity_label', identity_label)
         .eq('note_id', note_id).eq('owner_id', owner_id).maybeSingle());
     },
+    async findBackupCreationProofs({ judge_run_id, identity_label, note_id, owner_id }) {
+      // A separately persisted creation audit is the trusted origin anchor.
+      // Retrieve at most two rows: ambiguity or duplicates must fail closed.
+      return ensure(await database.from('stage10_restore_audit')
+        .select('judge_run_id, identity_label, note_id, owner_id, event_kind, reason_code, content_sha256')
+        .eq('judge_run_id', judge_run_id).eq('identity_label', identity_label)
+        .eq('note_id', note_id).eq('owner_id', owner_id)
+        .eq('event_kind', 'backup_created').limit(2));
+    },
     async listBackupNoteIds({ judge_run_id, identity_label, owner_id }) {
       const rows = ensure(await database.from('stage10_note_backups').select('note_id')
         .eq('judge_run_id', judge_run_id).eq('identity_label', identity_label)
