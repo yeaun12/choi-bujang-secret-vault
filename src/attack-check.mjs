@@ -22,9 +22,9 @@ async function hasJsonError(response) {
 }
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config.step)) {
     throw new Error(
-      'src/attack-check.mjs currently supports stages 1 through 9.'
+      'src/attack-check.mjs currently supports stages 1 through 10.'
     );
   }
 
@@ -228,11 +228,11 @@ export async function runAttackChecks(config) {
     },
   ];
 
-  // Stages 8-9: only real anonymous HTTP requests, never account tokens.
+  // Stages 8-10: only real anonymous HTTP requests, never account tokens.
   // Stage 9 local detection proposals are separately tested with detect:test.
   // Cross-owner and instructor write checks were performed manually and are not
   // re-enacted with credentials by the submission bundle.
-  if (config.step === 8 || config.step === 9) {
+  if (config.step === 8 || config.step === 9 || config.step === 10) {
     const noticeGet = await fetch(new URL('/api/instructor-notices', app), {
       redirect: 'error',
       signal: AbortSignal.timeout(10000),
@@ -264,6 +264,26 @@ export async function runAttackChecks(config) {
           : `Anonymous notice creation denial check failed (HTTP ${noticePost.status}).`,
       },
     );
+  }
+
+  if (config.step === 10) {
+    // Stage 10: attempt an actual anonymous recovery POST, with no valid token,
+    // note UUID or body contents. It must be rejected *before* JSON parsing.
+    const restoreResponse = await fetch(new URL('/api/restore', app), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{',
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+    const restoreDenied = await hasJsonError(restoreResponse);
+    checks.push({
+      attackId: 'anonymous_note_restore_denied',
+      expected: 'Anonymous attempt to restore a note is denied with a JSON authentication error.',
+      observed: restoreDenied
+        ? `Anonymous note restore was denied with JSON (HTTP ${restoreResponse.status}).`
+        : `Anonymous note restore denial failed (HTTP ${restoreResponse.status}).`,
+    });
   }
 
   return checks;

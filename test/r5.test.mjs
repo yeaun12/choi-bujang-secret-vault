@@ -372,3 +372,54 @@ test('stage 9 self-check preserves observed anonymous HTTP checks', async () => 
     globalThis.fetch = originalFetch;
   }
 });
+
+test('deployment identity supports stage 10 with one-note restore route', () => {
+  const config = {
+    ...baseConfig, step: 10,
+    allowedRoutes: [...baseConfig.allowedRoutes,
+      'GET /api/instructor-notices', 'POST /api/instructor-notices',
+      'GET /api/instructor-notices/:id', 'PUT /api/instructor-notices/:id',
+      'POST /api/restore'],
+    originalApiUrl: 'https://student-project.supabase.co/rest/v1/notes',
+    restoreRoute: '/api/restore',
+  };
+  const identity = deploymentIdentity(env, config);
+  assert.equal(identity.step, 10);
+  assert.equal(identity.schema, 'aleph.defense.deployment.v1');
+  assert.deepEqual(identity.allowedRoutes, config.allowedRoutes);
+  assert.equal(identity.judgeIssuer, config.judgeIssuer);
+  assert.equal(identity.originalApiUrl, config.originalApiUrl);
+});
+
+test('stage 10 self-check uses real anonymous HTTP evidence for recovery denial', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  try {
+    globalThis.fetch = async (url, init = {}) => {
+      const path = new URL(url).pathname;
+      const method = init.method ?? 'GET';
+      requests.push([path, method, init.headers?.Authorization ?? null]);
+      if (path === '/data.json') return new Response('Not Found', { status: 404 });
+      return new Response(JSON.stringify({ error: 'Authentication required.' }), {
+        status: 401, headers: { 'content-type': 'application/json' },
+      });
+    };
+    const attempts = await runAttackChecks({ ...baseConfig, step: 10 });
+    assert.equal(attempts.length, 7);
+    assert.deepEqual(requests.map(([path, method]) => [path, method]), [
+      ['/data.json', 'GET'],
+      ['/api/notes', 'GET'],
+      ['/api/notes', 'POST'],
+      ['/api/notes', 'GET'],
+      ['/api/instructor-notices', 'GET'],
+      ['/api/instructor-notices', 'POST'],
+      ['/api/restore', 'POST'],
+    ]);
+    assert.ok(requests.every(([, , auth]) =>
+      auth === null || auth === 'Bearer bad.token.value'));
+    assert.ok(attempts.every(item => /HTTP (401|404)/u.test(item.observed)));
+    assert.equal(attempts.at(-1).attackId, 'anonymous_note_restore_denied');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

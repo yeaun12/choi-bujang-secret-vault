@@ -458,3 +458,11 @@ git status --short
 **미실행:** 공식 B 메모 백업 생성 → 실제 변조·삭제 → POST 복원 → 원본 해시·소유자 대조; 실제 A/B 세션의 정상/거부 요청 재검증; 공식 심판의 1~9단계 공격 재전송. 명시적으로 미실행으로 유지하고 결과를 추정하지 않습니다.
 
 **보존:** 기존 1~9단계 `decide(request)` 다섯 필드·`RULE_IDS` 세 개, `src/detect.mjs`, 메모·공지 DB, 기존 감사 기록. `judgeIssuer`와 서버 전용 비밀값을 변경하거나 공개하지 않습니다. 제출 묶음에는 비공개 메모 본문을 포함하지 않습니다.
+
+### 10단계 저장점 준비 및 실제 배포 설정
+
+- 9단계 공식 심판 통과는 사용자 제출 화면에서 2026-10-13 확인됐습니다. 10단계 변경은 이를 기반으로 한 별도 브랜치에서 개발했습니다.
+- `aleph.config.json.step`을 **10**으로 변경하고 `restoreRoute`를 `/api/restore`로 지정했습니다. `allowedRoutes`에는 `POST /api/restore` 한 개를 추가했으며, 기존 로그인/메모/강사 공지 경로는 그대로입니다.
+- 배포 식별, 빌드, 자기 점검의 허용 단계를 10까지 확장했습니다. `judgeIssuer`, `identityProvider`, `originalApiUrl`, `publicAppUrl`, 실제 `src/decider.mjs`의 기존 RULE_IDS와 `src/detect.mjs`는 변경하지 않았습니다.
+- `npm run bundle`에서 기록하는 공격 점검은 비인증 `/data.json`·메모·공지 API와 비인증 **POST `/api/restore`**의 실제 HTTP 응답 7건입니다. 이것만으로 심판 B 복구 성공을 증명하지 않습니다.
+- **저장점 미검증:** 실제 B 최초 백업 생성·변조·삭제·한 건 복원과 그 후 1~9단계 실시간 공격 재전송. 최종 배포와 로컬 재시험 후 수행 여부만 갱신해야 합니다. 실제 실행 없이 성공으로 기록하지 않습니다.
