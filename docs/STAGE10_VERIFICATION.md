@@ -51,5 +51,5 @@
 
 `db/stage10-atomic-b-creation.sql`은 메모·사본·감사 쓰기를 하나의 PostgreSQL 함수 호출로 묶는 **미적용 SQL**입니다. 작업 브랜치에서는 `api/notes/index.js`의 공식 B 메모 생성이 `src/stage10-atomic-create.mjs`의 RPC 어댑터를 사용하도록 변경했습니다. 함수가 설치되지 않았거나 실패하면 **비원자적 INSERT로 돌아가지 않고 503을 반환**합니다. 그 대신 학생과 심판 A의 기존 생성 경로는 유지합니다.
 
-`test/stage10-api-flow.test.mjs`는 자체 시험 저장소에서 함수의 원자적 성공·백업 실패·감사 실패·중복 ID 처리를 재현합니다. `test/stage10-atomic-create.test.mjs`는 인증된 B와 요청 소유자 결합 및 함수 부재 시 거부를 검사합니다. 이는 **테스트용 구현이며 실제 PostgreSQL RPC 실행 증거가 아닙니다**. 운영 Supabase에는 아직 `public.stage10_create_b_note`가 없고, 기존 운영 `main` 배포도 그대로입니다. SQL 적용/독립 DB 시험과 새 브랜치의 전체 테스트가 통과하기 전에는 이 브랜치를 배포하지 않습니다.
+`test/stage10-api-flow.test.mjs`는 자체 시험 저장소에서 함수의 원자적 성공·백업 실패·감사 실패·중복 ID 처리를 재현합니다. `test/stage10-atomic-create.test.mjs`는 인증된 B와 요청 소유자 결합 및 함수 부재 시 거부를 검사합니다. 이는 **테스트용 구현이며 실제 PostgreSQL RPC 실행 증거가 아닙니다**. 운영 Supabase에는 아직 `public.stage10_create_b_note`가 없고, 기존 운영 `main` 배포도 그대로입니다. 함수 적용 후 별도 검증용 DB에서 `test/stage10-atomic-db-rollback.sql`을 한 트랜잭션으로 실행하면 생성된 메모/사본/감사 한 건 일치, 동일 ID 중복 거부, 익명 역할의 함수 실행 권한 부재를 검사하고 마지막에 `ROLLBACK`합니다. 이 SQL 파일은 아직 실행하지 않았습니다. SQL 적용/독립 DB 시험과 새 브랜치의 전체 테스트가 통과하기 전에는 이 브랜치를 배포하지 않습니다.
 
