@@ -15,6 +15,27 @@ const execute = promisify(execFile);
 const fingerprint = () => createHash('sha256')
   .update(readFileSync(join(root, 'src/decider.mjs'))).digest('hex');
 
+export function readTupleProofs(output) {
+  const tuples = [];
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+  for (const line of output.split('\n')) {
+    const match = /^\s*# STAGE10_TUPLE_PROOF (.+)$/u.exec(line);
+    if (!match) continue;
+    let value;
+    try { value = JSON.parse(match[1]); } catch { return null; }
+    if (value?.scope !== 'local_synthetic' || !['tampered', 'deleted'].includes(value.scenario)) return null;
+    const records = [value.backup, value.restored, value.response];
+    if (!records.every(row => row && uuid.test(row.id ?? '') && uuid.test(row.ownerId ?? '')
+        && /^[a-f0-9]{64}$/u.test(row.contentSha256 ?? '')
+        && Object.keys(row).sort().join(',') === 'contentSha256,id,ownerId')) return null;
+    if (!['id', 'ownerId', 'contentSha256'].every(key =>
+      value.backup[key] === value.restored[key] && value.backup[key] === value.response[key])) return null;
+    tuples.push(value);
+  }
+  if (tuples.length !== 2 || new Set(tuples.map(row => row.scenario)).size !== 2) return null;
+  return tuples;
+}
+
 export async function runStage10SelfChecks() {
   const checks = [];
   let policyVerified = false;
@@ -72,13 +93,13 @@ export async function runStage10SelfChecks() {
   const missing = passed('missing or corrupt backup aborts without changing notes');
   const deleted = passed('deleted B note recreated from its original backup, retaining other notes and audit');
   const incomplete = passed('unexecuted A cross-owner retest makes the overall result incomplete');
+  const proofs = readTupleProofs(output);
+  const tamperedProof = proofs?.find(row => row.scenario === 'tampered');
+  const tuple = row => 'id=' + row.id + '; owner=' + row.ownerId + '; sha256=' + row.contentSha256;
   const groups = [
     ['stage10_local_backup_readback', full && missing,
       'Re-read the stored synthetic B snapshot; missing/corrupt backups must abort before writes.',
       'Backup readback and missing/corrupt rejection verified.'],
-    ['stage10_local_restore_tuple_match', full && deleted,
-      'Synthetic B tamper/delete recovery must match backup ID, stored owner and content SHA-256, preserving other notes.',
-      'Tamper and delete recovery tuples matched; other notes and prior audit preserved.'],
     ['stage10_local_postrestore_retests', full && incomplete,
       'Execute normal and forbidden requests after local recovery; an unexecuted A check must keep overall passed=false.',
       'Normal 200/hash match; anonymous 401, query 400, cross-owner 404; missing A remains unexecuted.'],
@@ -88,5 +109,14 @@ export async function runStage10SelfChecks() {
       observed: (ok ? 'PASS: ' + detail : 'FAILED: corresponding API integration assertions did not pass.')
         + ' Local HTTP with synthetic signed tokens and test storage; not production/judge evidence.' });
   }
+  checks.splice(3, 0, {
+    attackId: 'stage10_local_restore_tuple_match',
+    expected: tamperedProof ? 'Local synthetic B backup: ' + tuple(tamperedProof.backup)
+      : 'Local synthetic B recovery requires measured backup, restored row and response ID/owner/SHA-256.',
+    observed: full && deleted && proofs
+      ? 'PASS: restored ' + tuple(tamperedProof.restored)
+        + '; backup/response match; delete checked; others/audit preserved. Local test storage; not production/judge evidence.'
+      : 'FAILED: measured backup/restored/response tuple evidence missing or mismatched; not a verified recovery.',
+  });
   return checks;
 }

@@ -133,7 +133,7 @@ async function seed() {
   return { a, b, other };
 }
 
-test('full API flow: signed creation, immutable backup, mutation, preview, exact restoration and retests', async () => {
+test('full API flow: signed creation, immutable backup, mutation, preview, exact restoration and retests', async t => {
   const { a, b, other } = await seed();
   const preserved = structuredClone(tables.notes.filter(row => row.id !== b));
   const backup = structuredClone(tables.stage10_note_backups.find(row => row.note_id === b));
@@ -165,10 +165,18 @@ test('full API flow: signed creation, immutable backup, mutation, preview, exact
   assert.equal((await call('GET', '/api/notes/' + a, tokenA)).status, 200);
   assert.equal((await call('GET', '/api/notes/' + a, tokenB)).status, 404);
   assert.equal((await call('GET', '/api/notes/' + other, tokenB)).status, 200);
+  t.diagnostic('STAGE10_TUPLE_PROOF ' + JSON.stringify({
+    scenario: 'tampered', scope: 'local_synthetic',
+    backup: { id: backup.note_id, ownerId: backup.owner_id, contentSha256: backup.content_sha256 },
+    restored: { id: row.id, ownerId: row.owner_id, contentSha256: sha256(row.content) },
+    response: { id: result.body.id, ownerId: result.body.ownerId,
+      contentSha256: result.body.contentSha256 },
+  }));
 });
 
-test('deleted B note recreated from its original backup, retaining other notes and audit', async () => {
+test('deleted B note recreated from its original backup, retaining other notes and audit', async t => {
   const { b } = await seed();
+  const backup = structuredClone(tables.stage10_note_backups.find(row => row.note_id === b));
   assert.equal((await call('DELETE', '/api/notes/' + b)).status, 200);
   const result = await call('POST', '/api/restore', tokenB, { noteId: b });
   assert.equal(result.status, 200);
@@ -176,6 +184,17 @@ test('deleted B note recreated from its original backup, retaining other notes a
   assert.equal(result.body.ownerId, noteScopeOwnerId(identityB));
   assert.equal(result.body.retest.passed, true);
   assert.equal(tables.notes.length, 3);
+  const row = tables.notes.find(note => note.id === b);
+  assert.equal(row.id, backup.note_id);
+  assert.equal(row.owner_id, backup.owner_id);
+  assert.equal(sha256(row.content), backup.content_sha256);
+  t.diagnostic('STAGE10_TUPLE_PROOF ' + JSON.stringify({
+    scenario: 'deleted', scope: 'local_synthetic',
+    backup: { id: backup.note_id, ownerId: backup.owner_id, contentSha256: backup.content_sha256 },
+    restored: { id: row.id, ownerId: row.owner_id, contentSha256: sha256(row.content) },
+    response: { id: result.body.id, ownerId: result.body.ownerId,
+      contentSha256: result.body.contentSha256 },
+  }));
 });
 
 test('missing or corrupt backup aborts without changing notes', async () => {
