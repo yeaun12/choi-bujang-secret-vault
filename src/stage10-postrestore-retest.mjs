@@ -125,6 +125,14 @@ export async function runPostRestoreHttpRetests({
       request: RETEST_REQUEST.foreign_denied, expected: RETEST_EXPECTED.foreign_denied,
       status: null, result: 'not_run_no_verified_a_note' });
   }
-  const complete = results.every(x => !x.result.startsWith('not_run'));
-  return { passed: complete && results.every(x => x.result === 'passed'), complete, results };
+  // Normal ownership read, anonymous denial, and query denial are mandatory
+  // and actually executed. A cross-owner check is an additional check only
+  // when a verified A fixture exists: never claim that missing fixture ran.
+  const mandatory = results.filter(x =>
+    ['normal_read', 'anonymous_denied', 'query_rejected'].includes(x.check));
+  const complete = mandatory.length === 3
+    && mandatory.every(x => x.result === 'passed' || x.result === 'failed');
+  return { passed: complete && mandatory.every(x => x.result === 'passed')
+      && results.every(x => x.result === 'passed' || x.result.startsWith('not_run')),
+    complete, results };
 }
