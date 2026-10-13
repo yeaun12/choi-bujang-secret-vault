@@ -6,7 +6,7 @@ BEGIN;
 DO $verify$
 DECLARE
   run_id uuid := gen_random_uuid();
-  owner_id uuid := gen_random_uuid();
+  expected_owner uuid := gen_random_uuid();
   requested_id uuid := gen_random_uuid();
   created_id uuid;
   expected_hash text := encode(sha256(convert_to('stage10 synthetic atomic restore test', 'UTF8')), 'hex');
@@ -20,7 +20,7 @@ BEGIN
   END IF;
 
   SELECT x.note_id INTO created_id
-  FROM public.stage10_create_b_note(run_id, owner_id,
+  FROM public.stage10_create_b_note(run_id, expected_owner,
     'stage10 synthetic atomic test', 'stage10 synthetic atomic restore test',
     requested_id) AS x;
 
@@ -30,7 +30,7 @@ BEGIN
 
   SELECT * INTO found_backup FROM public.stage10_note_backups AS b
   WHERE b.judge_run_id = run_id AND b.note_id = requested_id
-    AND b.owner_id = owner_id AND b.identity_label = 'b';
+    AND b.owner_id = expected_owner AND b.identity_label = 'b';
   IF NOT FOUND OR found_backup.content_sha256 IS DISTINCT FROM expected_hash
     OR found_backup.content_sha256 IS DISTINCT FROM
       encode(sha256(convert_to(found_backup.content, 'UTF8')), 'hex') THEN
@@ -48,7 +48,7 @@ BEGIN
   END IF;
 
   BEGIN
-    PERFORM * FROM public.stage10_create_b_note(run_id, owner_id,
+    PERFORM * FROM public.stage10_create_b_note(run_id, expected_owner,
       'stage10 synthetic duplicate', 'never overwrite', requested_id);
     RAISE EXCEPTION 'stage10_duplicate_accepted';
   EXCEPTION
