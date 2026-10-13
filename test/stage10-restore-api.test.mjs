@@ -90,10 +90,10 @@ test('retest reports normal/forbidden kinds and keeps unexecuted checks as not r
   });
   assert.equal(out.passed, true);
   assert.equal(out.complete, true);
+  assert.deepEqual(out.skipped.map(x => x.check), ['foreign_denied']);
   assert.deepEqual(out.results.map(x => [x.check, x.kind, x.result]), [
     ['normal_read', 'normal', 'passed'],
     ['anonymous_denied', 'forbidden', 'passed'],
     ['query_rejected', 'forbidden', 'passed'],
-    ['foreign_denied', 'forbidden', 'not_run_no_verified_a_note'],
   ]);
 });
