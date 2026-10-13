@@ -4,6 +4,7 @@ import config from '../aleph.config.json' with { type: 'json' };
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import {
   isJudgeB, restoreOneJudgeBNote, previewOneJudgeBNote, findSingleChangedJudgeBNote,
+  verifyOriginalBackupAudit,
 } from '../src/stage10-note-recovery.mjs';
 import { stage10Repository } from '../src/stage10-recovery-repository.mjs';
 import { runPostRestoreHttpRetests } from '../src/stage10-postrestore-retest.mjs';
@@ -104,6 +105,19 @@ export async function POST(request) {
       return json({ error: plan.code, restored: false,
         backup: { verified: false } }, plan.status);
     }
+    // Independent trust anchor: a self-consistent snapshot hash is not enough
+    // if both the backup body and its stored digest have been altered.
+    const creationProof = await verifyOriginalBackupAudit({ identity, noteId, repository });
+    if (!creationProof.verified) {
+      await repository.appendAudit({
+        judge_run_id: identity.runId.toLowerCase(), identity_label: 'b',
+        note_id: noteId.toLowerCase(), owner_id: plan.ownerId,
+        event_kind: 'restore_rejected', reason_code: 'backup_origin_not_verified',
+      });
+      trace('backup', 'backup_origin_not_verified', 409);
+      return json({ error: 'backup_origin_not_verified', restored: false,
+        backup: { verified: false, reason: creationProof.reason } }, 409);
+    }
     if ((input.expectedSha256 && input.expectedSha256 !== plan.backup.contentSha256)
         || !ownerMatches(input.expectedOwnerId, identity, plan.ownerId)) {
       trace('preview', 'expectation_mismatch', 409);
@@ -116,9 +130,19 @@ export async function POST(request) {
       return json({ preview: true, restored: false, id: plan.noteId, noteId: plan.noteId,
         ownerId: plan.ownerId, owner, backup: publicBackup(plan.backup, owner),
         version: plan.backup.version, changes: plan.changedFields,
+        creationAuditVerified: true,
         currentSha256: plan.beforeSha256 });
     }
 
+    // Recheck the independent audit and persisted snapshot directly before
+    // the recovery operation. On a changed or missing anchor, do not write.
+    const creationProofAgain = await verifyOriginalBackupAudit({ identity, noteId, repository });
+    if (!creationProofAgain.verified
+        || creationProofAgain.contentSha256 !== creationProof.contentSha256) {
+      trace('backup', 'backup_origin_changed', 409);
+      return json({ error: 'backup_origin_changed', restored: false,
+        backup: { verified: false } }, 409);
+    }
     const result = await restoreOneJudgeBNote({ identity, noteId, repository });
     if (result.status !== 200) {
       trace('restore', result.code, result.status);
@@ -150,7 +174,8 @@ export async function POST(request) {
       contentSha256: result.contentSha256, mode: result.mode,
       version: result.backup.version, changes: result.changedFields,
       previousSha256: result.beforeSha256,
-      backup: publicBackup(result.backup, owner),
+      backup: { ...publicBackup(result.backup, owner),
+        creationAuditVerified: true, creationAuditRereadBeforeRestore: true },
       match: { ...match, all: match.id && match.ownerId && match.contentSha256 },
       scope: { restoredNotes: 1, otherNotesTouched: 0, auditPreserved: true },
       retest: {
