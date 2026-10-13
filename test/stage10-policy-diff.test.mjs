@@ -5,13 +5,32 @@ import {
   comparePolicyText, readTestPolicy,
 } from '../scripts/stage10-policy-diff.mjs';
 
-test('stage 10 task 1: verified stage 8 and 9 policy blobs agree', () => {
+test('stage 10 task 1: passed safe blob is intact and only the approved restore route was added', () => {
   const safe = readVerifiedSafePolicy();
   const current = readTestPolicy();
-  const result = comparePolicyText(safe, current);
   assert.equal(SAFE_POLICY_PROVENANCE.blob.length, 40);
-  assert.equal(result.matchesBackup, true);
-  assert.equal(result.addedLines, 0);
+
+  // The safe policy from stages 8 and 9 must remain byte-for-byte identical
+  // except for this precise, approved stage 10 POST recovery route insertion.
+  // Any extra policy drift (including changes to earlier allow/deny rules)
+  // must fail this test rather than being silently accepted.
+  const approvedAddition = [
+    "  // Stage 10 exact recovery route only. The server separately authenticates",
+    "  // signed judge B and validates backup owner, note ID and SHA-256.",
+    "  if (path === '/api/restore' && method === 'POST' &&",
+    "      route === 'POST /api/restore') {",
+    "    return { zone: 'restore', resourceId: 'restore:one_note' };",
+    "  }",
+    "",
+  ].join('\n');
+  assert.equal(current.split(approvedAddition).length, 2,
+    'The exact approved recovery rule must occur once.');
+  assert.equal(current.replace(approvedAddition, ''), safe,
+    'Unexpected change to the stage 8/9 verified access policy.');
+
+  const result = comparePolicyText(safe, current);
+  assert.equal(result.matchesBackup, false);
+  assert.equal(result.addedLines, 6);
   assert.equal(result.removedLines, 0);
 });
 
