@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { checkStoredNoteOwner, getExactNoteId, isExactNoteCollection,
-  isOwnedNoteList, isStoredNoteOwner } from '../src/resource-api-auth.mjs';
+  isOwnedNoteList, isStoredNoteOwner, noteScopeOwnerId } from '../src/resource-api-auth.mjs';
 
 const a = '123e4567-e89b-42d3-a456-426614174000';
 const b = '123e4567-e89b-42d3-b456-426614174001';
@@ -49,4 +49,24 @@ test('정확한 자료 경로만 자료 ID로 인정', () => {
   assert.equal(getExactNoteId(path(`/api/notices/${a}`)), null);
   assert.equal(getExactNoteId(path(`/api/notes/${a}/export`)), null);
   assert.equal(isExactNoteCollection(path('/api/notes/export')), false);
+});
+
+test('심판이 같은 sub를 보내도 서명 검증된 A/B 구역은 독립이다', async () => {
+  const subject = '123e4567-e89b-42d3-a456-426614174000';
+  const runId = '123e4567-e89b-42d3-b456-426614174001';
+  const judgeA = { kind: 'judge', userId: subject, runId, identity: 'a' };
+  const judgeB = { kind: 'judge', userId: subject, runId, identity: 'b' };
+  const ownerA = noteScopeOwnerId(judgeA);
+  const ownerB = noteScopeOwnerId(judgeB);
+  assert.ok(/^[0-9a-f-]{36}$/u.test(ownerA));
+  assert.notEqual(ownerA, subject);
+  assert.notEqual(ownerA, ownerB);
+  assert.equal(ownerA, noteScopeOwnerId({ ...judgeA }));
+  assert.equal(isStoredNoteOwner(judgeA, ownerA), true);
+  assert.equal(isStoredNoteOwner(judgeB, ownerA), false);
+  assert.equal(isStoredNoteOwner(judgeB, ownerB), true);
+  assert.equal(isOwnedNoteList(judgeB, [{ owner_id: ownerA }]), false);
+  assert.equal(isOwnedNoteList(judgeB, [{ owner_id: ownerB }]), true);
+  assert.equal(noteScopeOwnerId({ kind: 'judge', userId: subject, identity: 'a' }), null);
+  assert.equal(noteScopeOwnerId({ kind: 'student', userId: subject, role: 'instructor' }), subject);
 });
