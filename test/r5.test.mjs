@@ -277,6 +277,50 @@ test('stage 7 self-check retains actual HTTP evidence, not simulated re-login ev
 });
 
 test('deployment identity rejects unsupported stages', () => {
-  const config = { ...baseConfig, step: 8 };
+  const config = { ...baseConfig, step: 13 };
   assert.throws(() => deploymentIdentity(env, config));
+});
+
+test('deployment identity supports stage 8 with notice API route metadata', () => {
+  const config = {
+    ...baseConfig,
+    step: 8,
+    allowedRoutes: [...baseConfig.allowedRoutes, 'GET /api/instructor-notices', 'POST /api/instructor-notices', 'GET /api/instructor-notices/:id', 'PUT /api/instructor-notices/:id'],
+    originalApiUrl: 'https://student-project.supabase.co/rest/v1/notes',
+  };
+  const result = deploymentIdentity(env, config);
+  assert.equal(result.step, 8);
+  assert.deepEqual(result.allowedRoutes, config.allowedRoutes);
+  assert.equal(result.judgeIssuer, config.judgeIssuer);
+  assert.equal(result.originalApiUrl, config.originalApiUrl);
+});
+
+test('stage 8 self-check records anonymous notice denials without account tokens', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  try {
+    globalThis.fetch = async (url, init = {}) => {
+      const pathname = new URL(url).pathname;
+      requests.push([pathname, init.method ?? 'GET', init.headers?.Authorization ?? null]);
+      if (pathname === '/data.json') return new Response('Not Found', { status: 404 });
+      return new Response(JSON.stringify({ error: 'Authentication required.' }), {
+        status: 401, headers: { 'content-type': 'application/json' },
+      });
+    };
+    const results = await runAttackChecks({ ...baseConfig, step: 8 });
+    assert.equal(results.length, 6);
+    assert.deepEqual(requests.map(([path, method]) => [path, method]), [
+      ['/data.json', 'GET'],
+      ['/api/notes', 'GET'],
+      ['/api/notes', 'POST'],
+      ['/api/notes', 'GET'],
+      ['/api/instructor-notices', 'GET'],
+      ['/api/instructor-notices', 'POST'],
+    ]);
+    assert.ok(requests.every(([, , auth]) => auth === null ||
+      auth === 'Bearer bad.token.value'));
+    assert.ok(results.every(item => /HTTP (401|404)/u.test(item.observed)));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

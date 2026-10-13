@@ -324,4 +324,45 @@ npm run bundle
 - [x] 제작 1: 접속 신호 출처·형식 검사
 - [x] 제작 2: 복합 이상 가상 접속 추가 확인 판정
 - [x] 제작 3: 계약 확인, 미검증 운영 연계 명시
-- [ ] 7단계 배포 확인 및 공식 심판 통과 확인
+- [x] 7단계 배포 확인 및 공식 심판 통과 확인 (2026-10-13)
+
+## 8단계: 메모 소유권·강사 공지 자원 구역 (2026-10-13)
+
+### 동작 및 적용 범위
+
+- 메모 API는 검증된 로그인 주체의 `userId`와 DB의 `notes.owner_id`를 함께 확인합니다. 목록·개별 조회·수정·삭제에서 타인 소유 메모는 노출하지 않고, 개별 요청은 `404`로 응답합니다. 브라우저에서 전달한 사용자 ID나 역할 선언은 사용하지 않습니다.
+- 강사 공지는 `/api/instructor-notices`(목록 GET, 작성 POST)와 `/api/instructor-notices/:id`(조회 GET, 수정 PUT)로 구별됩니다. 서버가 로그인 토큰을 검증한 후 DB의 `instructor_memberships`를 다시 확인하여 일반 사용자의 작성·수정을 `403`으로 차단합니다. 강사 공지 조회는 로그인 사용자에게 허용합니다.
+- `src/decider.mjs`의 `resource_scope`는 요청 계약에 포함된 **메서드·경로·자원 구역**만 판정합니다. `subjectId`는 가명 ID이므로 Supabase의 소유자 번호나 강사 등록과 대조할 수 없습니다. **실제 권한 검사는 서버 API에서** 처리합니다.
+- 기존 6단계 기기 등록 규칙과 7단계 가상 위험 신호 기반 추가 확인 규칙을 유지합니다. `docs/DECIDER_REQUEST.md`의 다섯 항목 응답 계약을 변경하지 않았습니다.
+- DB 스키마 재현은 `supabase/step8_instructor_resource_zones.sql`에 있습니다. 새로운 테이블에 RLS를 활성화하고 직접 공개 권한을 주지 않으며, 서버 전용 역할에서만 접근합니다. 기존 메모를 변경하거나 임의의 강사 계정을 생성하지 않습니다.
+
+### 배포 및 재현
+
+- 개발·검증 브랜치: `step8-resource-zones`. 통과한 7단계의 커밋 이력은 유지하면서 8단계 저장점을 `main`에 반영합니다.
+- 8단계 Preview: `https://choi-bujang-secret-vault-git-step8-resource-zones-yeaun.vercel.app/`
+- 운영 주소: `https://choi-bujang-secret-vault-blush.vercel.app/`. `main` 반영 후 이 주소에서 실제 8단계 배포 및 비인증 점검을 확인합니다.
+- `aleph.config.json`의 `judgeIssuer`, `identityProvider`, `originalApiUrl`은 이전 단계에서 검증한 값을 유지하며, `allowedRoutes`에 공지 API 네 경로를 추가했습니다.
+
+```cmd
+git switch step8-resource-zones
+git pull --ff-only origin step8-resource-zones
+node --test test/resource-id.test.mjs test/resource-policy.test.mjs test/resource-api-auth.test.mjs test/instructor-notices.test.mjs
+npm run decider:test
+npm run fixture:7
+npm run test:r5
+npm run build -- --local
+```
+
+`npm run bundle`은 **커밋한 뒤**, 깨끗한 Git 작업 트리와 로컬 전용 `bundle-notes.json`의 `explanation`이 준비됐을 때만 실행합니다. 이 명령은 `artifacts/submission.json`을 만들면서 배포 API에 비인증 HTTP 점검을 실시합니다. 생성 파일과 `bundle-notes.json`은 커밋하지 않습니다.
+
+### 실제 계정 및 API 검증 (2026-10-13)
+
+- A·B 각각 본인 메모 목록 조회 `200`. B가 A의 테스트 메모에 직접 GET·PUT·DELETE 요청하면 모두 `404`. A가 다시 조회·새로고침한 결과 원본 메모가 변경되지 않았음을 확인했습니다.
+- 일반 B 계정에서 강사 공지 목록 조회 `200`, 공지 작성 POST `403`, 공지 수정 PUT `403`.
+- A 계정에 테스트 목적으로 강사 권한을 임시 부여하여 공지 작성 POST `201`, 수정 PUT `200`, 재조회 GET `200`, 수정 결과 일치를 확인했습니다. 검증 직후 임시 공지 1건과 임시 강사 권한 1건을 삭제·회수했습니다. 이후 확인한 DB의 강사 공지와 강사 권한 등록은 각각 0건이며 메모 5건은 유지됩니다.
+- Preview 시크릿 창에서 메인 로그인 화면과 비인증 메모 API 거부를 확인했습니다. 이 확인은 사용자가 실제로 수행했으며, 로컬 판정기 테스트는 공식 심판 결과가 아닙니다.
+
+### 미검증 사항
+
+- 공식 8단계 심판 접수·통과는 아직 수행하지 않았습니다. 공식 엔진의 `reasonCode` 등록부를 별도로 확인해야 하며, 현재 `resource_access_denied`의 등록 여부는 검증되지 않았습니다.
+- `src/attack-check.mjs`의 자동 점검은 비인증 공개 파일·메모·공지 경로만 검사합니다. A/B 소유권 및 강사 권한의 실제 HTTP 테스트는 수동으로 수행했으며 제출 묶음 생성 때 사용자의 로그인 토큰을 재사용하지 않습니다.
