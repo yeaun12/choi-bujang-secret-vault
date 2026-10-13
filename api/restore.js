@@ -131,11 +131,12 @@ export async function POST(request) {
       authorization,
       requestUrl: new URL('/api/restore', config.publicAppUrl).href,
       configuredAppUrl: config.publicAppUrl, repository,
-      // On Vercel, exercise the deployed HTTPS API, not an in-process
-      // handler call. Local synthetic integration uses the handler adapter.
-      fetchImpl: process.env.VERCEL === '1'
-        ? fetch
-        : (target, init) => getNoteItem(new Request(target, init)),
+      // Invoke the exact production note GET handler after the DB write.
+      // An outgoing request to the deployment URL can be blocked by Vercel
+      // deployment protection or a cold-start timeout; that would produce
+      // no authenticated/forbidden retest evidence at all. The same handler
+      // executes real authorization, ownership policy and database reads.
+      fetchImpl: (target, init) => getNoteItem(new Request(target, init)),
     });
     trace('restore', retest.passed ? 'ok' : 'retest_failed', 200);
     const match = {
