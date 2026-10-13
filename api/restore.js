@@ -131,7 +131,11 @@ export async function POST(request) {
       authorization,
       requestUrl: new URL('/api/restore', config.publicAppUrl).href,
       configuredAppUrl: config.publicAppUrl, repository,
-      fetchImpl: (target, init) => getNoteItem(new Request(target, init)),
+      // On Vercel, exercise the deployed HTTPS API, not an in-process
+      // handler call. Local synthetic integration uses the handler adapter.
+      fetchImpl: process.env.VERCEL === '1'
+        ? fetch
+        : (target, init) => getNoteItem(new Request(target, init)),
     });
     trace('restore', retest.passed ? 'ok' : 'retest_failed', 200);
     const match = {
