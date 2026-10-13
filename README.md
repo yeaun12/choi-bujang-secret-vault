@@ -236,32 +236,55 @@ npm run build -- --local
 
 강사 안내에 따라 원본 `xdr/README.md`의 **심판 격리 환경에서 지킬 것**, `scripts/xdr-run.mjs`를 공식 시작 틀과 동일한 내용으로 복원했습니다. `xdr/fixtures/`의 여섯 파일도 원본과 SHA가 모두 같습니다. 1차 보너스 XDR-01의 `decide.mjs`, `patterns.json`, `result.json` 및 기존 1~5단계 기능은 수정하지 않았습니다. 남은 보너스의 격리 심판은 각 `decide.mjs` 한 파일만 로드하므로 import·파일 접근·네트워크 호출 없이 경보마다 독립적으로 판단합니다. 패키징 단계의 `package/`와 `api/` 관련 원본 파일은 그 단계에 도달한 뒤 검토하며 지금은 복원하지 않습니다.
 
-## 6단계: 등록한 기기만 자료실에 들어옵니다 (제출 후보, 2026-10-13)
 
-### 구현 범위
-- `src/decider.mjs`: 운영 엔진이 제공하는 `deviceRegistered`, `subjectId`, `deviceId`를 사용한 `device_registered` 규칙을 추가했습니다. 등록 확인과 식별자가 유효한 요청은 `approved`로 허용하고, 그렇지 않은 요청은 `device_not_registered`로 거부합니다. 응답은 `aleph.decision.v1` 계약의 다섯 필드로 제한합니다.
-- 사용자-기기 연결 여부와 인증서 검증은 공식 ALEPH SDP 엔진의 책임입니다. 브라우저 값으로 등록 상태를 만들거나 개인키를 직접 발급하지 않았습니다.
-- `aleph.config.json`은 `step`만 6으로 변경했습니다. `repoUrl`, `publicAppUrl`, `judgeIssuer`, `identityProvider`, 기존 8개 `allowedRoutes`, `originalApiUrl`은 보존했습니다.
-- `scripts/build-public.mjs`, `scripts/deployment-identity.mjs`, `src/attack-check.mjs`에 6단계 지원을 추가했습니다. 자체 점검의 실제 HTTP 요청은 기존 비인증 차단 및 정적 파일 확인이며, SDP 등록 기기의 성공을 입증하는 테스트는 아닙니다.
+## 6단계: 등록한 기기만 자료실에 들어옵니다
 
-### 확인한 로컬 결과
-2026-10-13 학생 PC에서 아래 명령을 실행했고 정상 종료했습니다.
+### 구현 목적
 
-```sh
-npm run test:r5
+등록된 기기의 요청만 허용하고, 미등록 기기나 등록 여부를 확인할 수 없는 요청은 거부한다.
+
+이번 단계에서는 별도의 접속 프로그램을 설치하거나 인증서를 발급하지 않는다. 공식 판정 요청 계약에 따라 `src/decider.mjs`에 기기 등록 조건을 구현한다.
+
+### 구현 내용
+
+- `docs/DECIDER_REQUEST.md`의 `aleph.decision.v1` 계약을 기준으로 작성
+- `RULE_IDS`에 `device_registered` 규칙 등록
+- `request.deviceRegistered === true`이면 `allow`, `approved` 반환
+- `deviceRegistered`가 `false`이거나 없으면 `deny`, `device_not_registered` 반환
+- 판정 응답의 필드 5개 유지
+- 기존 자료실 API, 로그인 및 데이터베이스 기능 유지
+- 인증서, CA, 개인키 및 서명 키를 새로 생성하거나 저장하지 않음
+
+### 검증 방법
+
+다음 명령어로 기존 기능과 판정 규칙을 검증한다.
+
+```cmd
+node --check src\decider.mjs
 npm run decider:test
-npm run build -- --local
+npm run test:r5
 ```
 
-- 회귀 테스트: 8개 통과, 실패 0
-- 등록 기기 허용·미등록 가상 기기 거부 판정: 2개 통과
-- 로컬 빌드: 정상, 공개 `public/data.json` 파일 미배포 유지
-- 위 시험은 **로컬 실행 결과**이며 심판 판정 및 실제 등록 기기 접속 증거는 아닙니다.
+### 로컬 검증 결과
 
-### 미완료 및 다음 점검
-1. 공개 시작 틀에는 제작 1의 SDP 엔진 연결 규격과 제작 3의 반별 접속 도구 설치 명령이 없어서 실제 엔진 연결은 아직 검증하지 못했습니다. 인증서나 명령을 임의로 만들지 않습니다.
-2. `step6-device-registration` 브랜치는 기존 `main` 및 운영 Vercel 배포와 구분됩니다. 배포 후 `/aleph.json`의 `step: 6`과 커밋을 직접 확인해야 합니다.
-3. 기존 로그인·본인 메모 읽기, 등록 기기 정상 접근, 미등록/타인 기기 거부, mTLS 인증서 누락 거부는 운영 엔진을 통해 추가 확인해야 합니다. 확인 전에는 완료로 표시하지 않습니다.
-4. 배포 증거와 미확인 항목을 `bundle-notes.json`에 기록하고 `npm run bundle`로 제출 묶음을 생성합니다. 두 파일 `bundle-notes.json`, `artifacts/submission.json`은 Git에 포함하지 않습니다.
+- JavaScript 문법 검사 통과
+- 등록 기기의 정상 요청: 통과 (`allow`)
+- 미등록 기기의 가상 요청: 통과 (`deny`, `device_not_registered`)
+- 기존 기능 회귀 테스트: 8개 통과
 
-**한계:** 현재 판정기의 조건 검사는 별도 엔진에서 검증된 요청을 받는다는 계약을 전제로 합니다. 엔진에 실제 연결되어 미등록 기기의 자료 읽기를 막았다고 주장하지 않습니다.
+`npm run decider:test`는 공식 엔진이 아닌 로컬 가상 요청 테스트다. 실제 공격 차단 및 공식 심판 통과 여부는 별도로 확인한다.
+
+### 기존 자료실 유지
+
+기존 1~5단계 기능은 수정하지 않았다. 6단계 Preview에서 기존 시험 계정으로 로그인하고 메모를 정상 조회한 것을 확인했다.
+
+이는 기존 화면의 기능 유지 확인이며, 실제 기기 등록 여부를 검증한 결과는 아니다.
+
+### 제출 전 확인
+
+- [x] 기기 등록 판정 규칙 구현
+- [x] 로컬 판정 테스트 통과
+- [x] 기존 기능 회귀 테스트 통과
+- [x] 개인키 및 인증서 신규 생성 없음
+- [ ] 최종 커밋 및 배포 확인
+- [ ] 공식 심판 제출 및 결과 확인
