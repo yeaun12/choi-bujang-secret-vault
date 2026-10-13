@@ -161,14 +161,14 @@ test('full API flow: signed creation, immutable backup, mutation, preview, exact
   assert.equal(result.body.match.all, true);
   assert.equal(result.body.retest.passed, true);
   assert.equal(result.body.postRestoreRetest.success, true);
-  assert.equal(result.body.postRestoreRetest.executed, 4);
-  assert.equal(result.body.postRestoreRetest.passed, 4);
+  assert.equal(result.body.postRestoreRetest.executed, 5);
+  assert.equal(result.body.postRestoreRetest.passed, 5);
   assert.equal(result.body.postRestoreRetest.failed, 0);
   assert.equal(result.body.postRestoreRetest.normal.length, 1);
-  assert.equal(result.body.postRestoreRetest.forbidden.length, 3);
+  assert.equal(result.body.postRestoreRetest.forbidden.length, 4);
   assert.ok([...result.body.postRestoreRetest.normal,
     ...result.body.postRestoreRetest.forbidden].every(x => Number.isInteger(x.status)));
-  assert.deepEqual(result.body.retests.map(check => check.result), ['passed', 'passed', 'passed', 'passed']);
+  assert.deepEqual(result.body.retests.map(check => check.result), ['passed', 'passed', 'passed', 'passed', 'passed']);
   assert.ok(backupReads >= 6);
   const row = tables.notes.find(note => note.id === b);
   assert.equal(sha256(row.content), backup.content_sha256);
@@ -248,10 +248,10 @@ test('unexecuted optional A check remains unexecuted while real normal and denia
   assert.equal(result.body.retest.passed, true, 'Actually run required checks passed; optional A stays unexecuted');
   assert.equal(result.body.retest.complete, true);
   assert.deepEqual(result.body.retest.notRun, ['foreign_denied']);
-  assert.equal(result.body.retest.executed, 3);
-  assert.equal(result.body.retest.passedCount, 3);
+  assert.equal(result.body.retest.executed, 4);
+  assert.equal(result.body.retest.passedCount, 4);
   assert.equal(result.body.retest.failedCount, 0);
-  assert.equal(result.body.retests.length, 3);
+  assert.equal(result.body.retests.length, 4);
   assert.ok(result.body.retests.every(x => Number.isInteger(x.status)));
 });
 
