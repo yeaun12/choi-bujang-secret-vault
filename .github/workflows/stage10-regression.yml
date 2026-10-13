@@ -21,6 +21,7 @@ jobs:
       - run: node --check src/verify-login.mjs
       - run: npm run test:stage10
       - run: node --test test/stage10-policy-diff.test.mjs test/stage10-policy-restore.test.mjs test/resource-id.test.mjs test/resource-policy.test.mjs test/resource-api-auth.test.mjs test/instructor-notices.test.mjs
+      - run: npm run test:stage10
       - run: npm run test:r5
       - run: npm run decider:test
       - run: npm run detect:test
