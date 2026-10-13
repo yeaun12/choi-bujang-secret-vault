@@ -163,6 +163,19 @@ export async function POST(request) {
         notRun: retest.skipped.map(x => x.check),
         skipped: retest.skipped,
       },
+      // Simple, measured summary alongside the detailed response evidence.
+      // Never turn a missing response or an unexecuted check into a pass.
+      postRestoreRetest: {
+        executed: retest.executed,
+        passed: retest.passedCount,
+        failed: retest.failedCount,
+        normal: retest.results.filter(x => x.kind === 'normal')
+          .map(x => ({ check: x.check, status: x.status, result: x.result })),
+        forbidden: retest.results.filter(x => x.kind === 'forbidden')
+          .map(x => ({ check: x.check, status: x.status, result: x.result })),
+        notRun: retest.skipped.map(x => x.check),
+        success: retest.passed,
+      },
       // Only executed HTTP responses are listed as retests.
       retests: retest.results,
     });
