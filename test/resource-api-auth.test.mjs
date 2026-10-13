@@ -70,3 +70,15 @@ test('심판이 같은 sub를 보내도 서명 검증된 A/B 구역은 독립이
   assert.equal(noteScopeOwnerId({ kind: 'judge', userId: subject, identity: 'a' }), null);
   assert.equal(noteScopeOwnerId({ kind: 'student', userId: subject, role: 'instructor' }), subject);
 });
+
+test('실제 동적 ID의 저장된 소유자는 동일 sub라도 심판 A만 읽고 B는 차단', async () => {
+  const sharedSub = '123e4567-e89b-42d3-a456-426614174000';
+  const runId = '123e4567-e89b-42d3-b456-426614174001';
+  const judgeA = { kind: 'judge', userId: sharedSub, runId, identity: 'a' };
+  const judgeB = { kind: 'judge', userId: sharedSub, runId, identity: 'b' };
+  const ownerA = noteScopeOwnerId(judgeA);
+  assert.equal(isStoredNoteOwner(judgeA, ownerA), true);
+  assert.equal(isStoredNoteOwner(judgeB, ownerA), false);
+  assert.equal(await checkStoredNoteOwner(fakeDB(ownerA), judgeA, sharedSub), 'allowed');
+  assert.equal(await checkStoredNoteOwner(fakeDB(ownerA), judgeB, sharedSub), 'denied');
+});

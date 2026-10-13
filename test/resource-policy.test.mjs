@@ -46,10 +46,12 @@ test('A 자기 메모 읽기·수정은 허용하고 B의 같은 메모 요청�
       assert.equal(decision.reasonCode, 'resource_access_denied');
     }
   }
-  // 규칙표에 없는 메모 ID는 경로 모양이 맞아도 열지 않는다.
+  // The dynamic API route is valid for both users; the server, not this
+  // stateless decider, must prevent B from reading A's stored owner_id.
   for (const method of ['GET', 'PUT', 'DELETE']) {
     const req = { ...base(), method, path: `/api/notes/${id}`, route: `${method} /api/notes/:id` };
-    assert.equal((await decide(req)).decision, 'deny', method);
+    assert.equal((await decide(req)).decision, 'allow', method);
+    assert.equal((await decide({ ...req, subjectId: 'other_learner_fixture' })).decision, 'allow');
   }
 });
 
@@ -116,4 +118,26 @@ test('경로 모양만 같은 다른 사용자의 개별 메모는 열지 않는
   assert.equal(classifyResourceRoute(subjectA), null);
   assert.equal(classifyResourceRoute(subjectB), null);
   // 자료 API도 저장된 owner_id로 다시 확인한다.
+});
+
+test('동적 UUID 메모는 정확한 경로만 열고 기능 경로·쿼리·부정확한 라우트는 막는다', async () => {
+  const own = { ...base(), method: 'GET', path: `/api/notes/${id}`, route: 'GET /api/notes/:id' };
+  assert.deepEqual(classifyResourceRoute(own), { zone: 'note', resourceId: `note:${id}` });
+  const malformed = [
+    { path: '/api/notes/export' },
+    { path: `/api/notes/${id}/export` },
+    { path: `/api/notes/${id}/` },
+    { path: `/api/notes/${id}?role=instructor` },
+    { queryLength: 1 },
+    { route: 'GET /api/notes' },
+    { route: 'GET /api/notes/export' },
+    { method: 'POST', route: 'POST /api/notes/:id' },
+    { deviceId: 'not-a-verified-device' },
+  ];
+  for (const invalid of malformed) {
+    const request = { ...own, ...invalid, requestId: randomUUID() };
+    assert.equal((await decide(request)).decision, 'deny', JSON.stringify(invalid));
+  }
+  const unknown = { ...own, path: '/notes/another-learner', route: 'GET /notes/:id' };
+  assert.equal((await decide(unknown)).decision, 'deny');
 });
