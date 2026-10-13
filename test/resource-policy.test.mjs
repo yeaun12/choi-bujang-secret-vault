@@ -112,12 +112,17 @@ test('같은 경로라도 7단계 복합 이상 사건은 여전히 추가 인�
   assert.equal((await decide({ ...risk, stepUp: { verified: true, authAgeSeconds: 60 } })).decision, 'allow');
 });
 
-test('경로 모양만 같은 다른 사용자의 개별 메모는 열지 않는다', () => {
+test('동적 UUID 경로는 자원 형식만 분류하고 사용자별 소유권은 API에서 검사한다', async () => {
   const subjectA = { ...base(), subjectId: 'anonymous_subject_A' };
   const subjectB = { ...base(), subjectId: 'anonymous_subject_B' };
-  assert.equal(classifyResourceRoute(subjectA), null);
-  assert.equal(classifyResourceRoute(subjectB), null);
-  // 자료 API도 저장된 owner_id로 다시 확인한다.
+  const expected = { zone: 'note', resourceId: `note:${id}` };
+  assert.deepEqual(classifyResourceRoute(subjectA), expected);
+  assert.deepEqual(classifyResourceRoute(subjectB), expected);
+  // Both requests may reach the API; a decider allow does NOT authorize data
+  // disclosure. The API separately compares verified A/B identity with owner_id.
+  assert.equal((await decide(subjectA)).decision, 'allow');
+  assert.equal((await decide(subjectB)).decision, 'allow');
+  // See resource-api-auth.test.mjs for the independent A-owns/B-denied test.
 });
 
 test('동적 UUID 메모는 정확한 경로만 열고 기능 경로·쿼리·부정확한 라우트는 막는다', async () => {
