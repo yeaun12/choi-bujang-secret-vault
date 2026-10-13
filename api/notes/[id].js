@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import config from '../../aleph.config.json' with { type: 'json' };
 import { createLoginVerifier } from '../../src/verify-login.mjs';
-import { checkStoredNoteOwner, getExactNoteId, isStoredNoteOwner } from '../../src/resource-api-auth.mjs';
+import { checkStoredNoteOwner, getExactNoteId, isStoredNoteOwner, noteScopeOwnerId } from '../../src/resource-api-auth.mjs';
 
 let supabase = null;
 let verifyLoginAuthorization = null;
@@ -80,7 +80,7 @@ export async function GET(request) {
     .from('notes')
     .select('id, title, content, owner_id')
     .eq('id', id)
-    .eq('owner_id', auth.identity.userId)
+    .eq('owner_id', noteScopeOwnerId(auth.identity))
     .maybeSingle();
 
   if (error) {
@@ -140,7 +140,7 @@ export async function PUT(request) {
       content: body,
     })
     .eq('id', id)
-    .eq('owner_id', auth.identity.userId)
+    .eq('owner_id', noteScopeOwnerId(auth.identity))
     .select('id, owner_id')
     .maybeSingle();
 
@@ -176,7 +176,7 @@ export async function DELETE(request) {
     .from('notes')
     .delete()
     .eq('id', id)
-    .eq('owner_id', auth.identity.userId)
+    .eq('owner_id', noteScopeOwnerId(auth.identity))
     .select('id, owner_id')
     .maybeSingle();
 
