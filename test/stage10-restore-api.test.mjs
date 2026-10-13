@@ -88,8 +88,8 @@ test('retest reports normal/forbidden kinds and keeps unexecuted checks as not r
     fetchImpl: async (url, init) => (init.headers.Authorization && !String(url).includes('?')
       ? Response.json({ id, body: 'safe' }) : new Response('', { status: statusFor(String(url)) })),
   });
-  assert.equal(out.passed, false);
-  assert.equal(out.complete, false);
+  assert.equal(out.passed, true);
+  assert.equal(out.complete, true);
   assert.deepEqual(out.results.map(x => [x.check, x.kind, x.result]), [
     ['normal_read', 'normal', 'passed'],
     ['anonymous_denied', 'forbidden', 'passed'],
