@@ -4,6 +4,10 @@ const SHA = /^[a-f0-9]{40}$/iu;
 const HOST = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.vercel\.app$/iu;
 
 export function deploymentIdentity(env, config) {
+  if (config?.step === 10 && (config.restoreRoute !== '/api/restore'
+      || !config.allowedRoutes?.includes('POST /api/restore'))) {
+    throw new Error('10단계 복구 경로와 POST 허용 경로가 일치해야 합니다.');
+  }
   const owner = env.VERCEL_GIT_REPO_OWNER;
   const repo = env.VERCEL_GIT_REPO_SLUG;
   const commit = env.VERCEL_GIT_COMMIT_SHA;
@@ -28,5 +32,6 @@ export function deploymentIdentity(env, config) {
     sampleMarker: config.sampleMarker,
     allowedRoutes: config.allowedRoutes,
     originalApiUrl: config.originalApiUrl,
+    ...(config.step === 10 ? { restoreRoute: config.restoreRoute } : {}),
   };
 }

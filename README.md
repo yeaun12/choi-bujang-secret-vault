@@ -490,3 +490,10 @@ git status --short
 - 복구 뒤 재시험은 배포된 `GET /api/notes/:id` 처리기를 같은 함수 안에서 실제로 호출합니다(정상 B 읽기 200·해시 일치, 비로그인 401, 쿼리 우회 400, B의 A 메모 404). A 메모가 없으면 `notRun`에 남기고 결과를 지어내지 않습니다. 재시험이 실패해도 복원 사실은 숨기지 않고 `retest.passed=false`로 보고합니다.
 - Vercel 함수 로그에는 `stage10_restore` 단계·이유 코드·상태만 남깁니다(토큰·본문 없음).
 - 로컬 확인: `node --test test/stage10-restore-api.test.mjs test/stage10-recovery.test.mjs test/stage10-postrestore-retest.test.mjs` (합성 가상 B 메모). 실제 심판 B의 변조→복구는 **미실행**이며 재제출 판정으로만 확인합니다.
+
+### 10단계 저장점: 배포 식별 정보의 복구 경로 누락 수정
+
+- `2ee15c3` 재판정에서도 세 조건이 실패했습니다. 해당 커밋이 운영 배포에 반영된 것은 확인했지만, DB 백업과 복원 감사 기록은 각각 0건이었습니다. 심판 호출 로그는 접근 권한 오류로 확인하지 못해 호출 실패 원인은 아직 확정하지 않았습니다.
+- 확인된 결함: `scripts/deployment-identity.mjs`가 `aleph.config.json.restoreRoute`를 배포의 `public/aleph.json`에 전달하지 않았습니다. 10단계에만 `/api/restore`를 전달하고, 설정과 `POST /api/restore` 허용 경로가 맞지 않으면 빌드를 중단합니다. 앞 단계의 배포 정보와 DB 자료·정책은 변경하지 않습니다.
+- 검증: `node --test test/r5.test.mjs test/stage10-*.test.mjs`. 빌드 때 생성한 `public/aleph.json`의 `restoreRoute`가 `/api/restore`인지 확인합니다. 이 검증은 공식 B 토큰을 사용한 실제 복구 성공이나 심판 통과를 뜻하지 않습니다.
+- 재제출 주소: `https://choi-bujang-secret-vault-blush.vercel.app/`. 새 커밋 배포가 READY인 것을 확인한 뒤 제출합니다. 판정 뒤 DB 백업·감사 기록과 반환 상태를 다시 확인해야 합니다.

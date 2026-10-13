@@ -385,6 +385,10 @@ test('deployment identity supports stage 10 with one-note restore route', () => 
   };
   const identity = deploymentIdentity(env, config);
   assert.equal(identity.step, 10);
+  assert.equal(identity.restoreRoute, '/api/restore');
+  assert.throws(() => deploymentIdentity(env, { ...config, restoreRoute: undefined }));
+  assert.throws(() => deploymentIdentity(env, { ...config,
+    allowedRoutes: config.allowedRoutes.filter(route => route !== 'POST /api/restore') }));
   assert.equal(identity.schema, 'aleph.defense.deployment.v1');
   assert.deepEqual(identity.allowedRoutes, config.allowedRoutes);
   assert.equal(identity.judgeIssuer, config.judgeIssuer);
