@@ -22,9 +22,9 @@ async function hasJsonError(response) {
 }
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(config.step)) {
     throw new Error(
-      'src/attack-check.mjs currently supports stages 1 through 7.'
+      'src/attack-check.mjs currently supports stages 1 through 8.'
     );
   }
 
@@ -193,7 +193,7 @@ export async function runAttackChecks(config) {
   const invalidTokenDenied =
     await hasJsonError(invalidTokenResponse);
 
-  return [
+  const checks = [
     {
       attackId: 'static_note_file_removed',
       expected:
@@ -227,4 +227,43 @@ export async function runAttackChecks(config) {
         : `Malformed login token denial check failed (HTTP ${invalidTokenResponse.status}).`,
     },
   ];
+
+  // Stage 8 self-check: only safe anonymous HTTP requests; never use account tokens.
+  // Cross-owner and instructor write checks were performed manually and are not
+  // re-enacted with credentials by the submission bundle.
+  if (config.step === 8) {
+    const noticeGet = await fetch(new URL('/api/instructor-notices', app), {
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+    const noticeGetDenied = await hasJsonError(noticeGet);
+
+    const noticePost = await fetch(new URL('/api/instructor-notices', app), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{',
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+    const noticePostDenied = await hasJsonError(noticePost);
+
+    checks.push(
+      {
+        attackId: 'anonymous_instructor_notice_read_denied',
+        expected: 'Anonymous instructor notice list request is denied with JSON authentication error.',
+        observed: noticeGetDenied
+          ? `Anonymous notice-list request was denied with JSON (HTTP ${noticeGet.status}).`
+          : `Anonymous notice-list denial check failed (HTTP ${noticeGet.status}).`,
+      },
+      {
+        attackId: 'anonymous_instructor_notice_create_denied',
+        expected: 'Anonymous instructor notice creation is denied before malformed input is processed.',
+        observed: noticePostDenied
+          ? `Anonymous notice creation request was denied with JSON (HTTP ${noticePost.status}).`
+          : `Anonymous notice creation denial check failed (HTTP ${noticePost.status}).`,
+      },
+    );
+  }
+
+  return checks;
 }
