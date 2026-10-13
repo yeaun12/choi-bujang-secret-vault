@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import config from '../../aleph.config.json' with { type: 'json' };
+import { traceStage8Access } from '../../src/stage8-access-trace.mjs';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
 import { isExactNoteCollection, isOwnedNoteList, noteScopeOwnerId } from '../../src/resource-api-auth.mjs';
 
@@ -74,6 +75,7 @@ export async function GET(request) {
   }
 
   if (!isExactNoteCollection(request)) {
+    traceStage8Access(auth.identity, 'note_list_get', 'invalid_path', 404);
     return jsonError(404, 'Resource not found.');
   }
 
@@ -84,13 +86,16 @@ export async function GET(request) {
     .order('created_at', { ascending: true });
 
   if (error) {
+    traceStage8Access(auth.identity, 'note_list_get', 'db_error', 500);
     return jsonError(500, 'Notes could not be loaded.');
   }
 
   if (!isOwnedNoteList(auth.identity, data)) {
+    traceStage8Access(auth.identity, 'note_list_get', 'ownership_check_denied', 403);
     return jsonError(403, 'Resource access denied.');
   }
 
+  traceStage8Access(auth.identity, 'note_list_get', 'own_filtered_list', 200);
   return jsonResponse(
     data.map(note => ({
       id: note.id,
@@ -151,12 +156,15 @@ export async function POST(request) {
 
   if (error) {
     if (error.code === '23505') {
+      traceStage8Access(auth.identity, 'note_create', 'duplicate_id', 409);
       return jsonError(409, 'A note with that id already exists.');
     }
 
+    traceStage8Access(auth.identity, 'note_create', 'db_error', 500);
     return jsonError(500, 'Note could not be created.');
   }
 
+  traceStage8Access(auth.identity, 'note_create', 'created', 201);
   return jsonResponse({ id: data.id }, 201);
 }
 

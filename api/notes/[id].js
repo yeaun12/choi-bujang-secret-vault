@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import config from '../../aleph.config.json' with { type: 'json' };
+import { traceStage8Access } from '../../src/stage8-access-trace.mjs';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
 import { checkStoredNoteOwner, getExactNoteId, isStoredNoteOwner, noteScopeOwnerId } from '../../src/resource-api-auth.mjs';
 
@@ -73,6 +74,7 @@ export async function GET(request) {
   const id = getExactNoteId(request);
 
   if (!id) {
+    traceStage8Access(auth.identity, 'note_item_get', 'invalid_path', 400);
     return jsonError(400, 'Invalid note id.');
   }
 
@@ -84,13 +86,16 @@ export async function GET(request) {
     .maybeSingle();
 
   if (error) {
+    traceStage8Access(auth.identity, 'note_item_get', 'db_error', 500);
     return jsonError(500, 'Note could not be loaded.');
   }
 
   if (!data || !isStoredNoteOwner(auth.identity, data.owner_id)) {
+    traceStage8Access(auth.identity, 'note_item_get', 'not_found_or_not_owner', 404);
     return jsonError(404, 'Note not found.');
   }
 
+  traceStage8Access(auth.identity, 'note_item_get', 'owner_match', 200);
   return jsonResponse({
     id: data.id,
     title: data.title,
