@@ -116,23 +116,22 @@ export async function runPostRestoreHttpRetests({
     results.push({ check: name, kind: RETEST_KIND[name], request: RETEST_REQUEST[name],
       expected: RETEST_EXPECTED[name], status, result: passed ? 'passed' : 'failed' });
   }
+  // Evidence array contains only requests that truly ran. Optional fixture
+  // absence remains explicitly disclosed separately, never labelled passed.
+  const skipped = [];
   if (!calls.some(x => x.name === 'foreign_denied')) {
     await repository.appendAudit({
       ...meta, event_kind: 'restore_rejected',
       reason_code: 'retest_foreign_not_run_no_a_note',
     });
-    results.push({ check: 'foreign_denied', kind: 'forbidden',
-      request: RETEST_REQUEST.foreign_denied, expected: RETEST_EXPECTED.foreign_denied,
-      status: null, result: 'not_run_no_verified_a_note' });
+    skipped.push({ check: 'foreign_denied', kind: 'forbidden',
+      reason: 'not_run_no_verified_a_note' });
   }
-  // Normal ownership read, anonymous denial, and query denial are mandatory
-  // and actually executed. A cross-owner check is an additional check only
-  // when a verified A fixture exists: never claim that missing fixture ran.
-  const mandatory = results.filter(x =>
-    ['normal_read', 'anonymous_denied', 'query_rejected'].includes(x.check));
-  const complete = mandatory.length === 3
-    && mandatory.every(x => x.result === 'passed' || x.result === 'failed');
-  return { passed: complete && mandatory.every(x => x.result === 'passed')
-      && results.every(x => x.result === 'passed' || x.result.startsWith('not_run')),
-    complete, results };
+  const mandatory = ['normal_read', 'anonymous_denied', 'query_rejected'];
+  const complete = mandatory.every(name => results.some(x =>
+    x.check === name && Number.isInteger(x.status)));
+  const passed = complete && results.every(x => x.result === 'passed');
+  return { passed, complete, results, skipped,
+    executed: results.length, passedCount: results.filter(x => x.result === 'passed').length,
+    failedCount: results.filter(x => x.result === 'failed').length };
 }
