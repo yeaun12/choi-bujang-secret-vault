@@ -168,7 +168,7 @@ export async function POST(request) {
 
   // Stage 10: capture B's original signed-judge note immediately on creation.
   // Never backfill an older or already modified note via GET/PUT/restore.
-  // The backup table is insert-only, and failures are never silently ignored.
+  // Reject an unprotected creation if the immutable backup cannot be verified.
   if (isJudgeB(auth.identity)) {
     try {
       await backupCreatedJudgeBNote({
@@ -176,8 +176,24 @@ export async function POST(request) {
         repository: stage10Repository(supabase),
       });
     } catch {
-      traceStage8Access(auth.identity, 'note_create', 'backup_failed', 503);
-      return jsonError(503, 'Note created but safe backup could not be verified.');
+      // A single PostgREST INSERT cannot atomically include the backup INSERT.
+      // Compensate only if the newly inserted row is still byte-for-byte
+      // unchanged; never delete a concurrently edited or foreign-owned note.
+      // A failed cleanup is NOT silently reported as completed.
+      let cleanup = 'not_confirmed';
+      try {
+        const { data: removed, error: removalError } = await supabase
+          .from('notes').delete()
+          .eq('id', data.id).eq('owner_id', data.owner_id)
+          .eq('title', data.title).eq('content', data.content)
+          .eq('created_at', data.created_at)
+          .select('id').maybeSingle();
+        if (!removalError && removed?.id === data.id) cleanup = 'removed';
+      } catch { /* Fail closed; do not claim cleanup that was not confirmed. */ }
+      console.info(JSON.stringify({
+        stage10_backup: 'capture_failed', status: 503, cleanup,
+      }));
+      return jsonError(503, 'Safe backup could not be verified; creation rejected.');
     }
   }
 
