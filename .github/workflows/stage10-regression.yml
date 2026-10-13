@@ -1,0 +1,26 @@
+name: Stage 10 judge-audience regression
+on:
+  push:
+    branches: [stage10-judge-audience-diagnostic]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b163ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node --check src/verify-login.mjs
+      - run: node --test test/stage10-judge-audience.test.mjs test/stage10-recovery.test.mjs test/stage10-postrestore-retest.test.mjs
+      - run: node --test test/stage10-policy-diff.test.mjs test/stage10-policy-restore.test.mjs test/resource-id.test.mjs test/resource-policy.test.mjs test/resource-api-auth.test.mjs test/instructor-notices.test.mjs
+      - run: npm run test:r5
+      - run: npm run decider:test
+      - run: npm run detect:test
+      - run: npm run fixture:7
+      - run: npm run build -- --local
