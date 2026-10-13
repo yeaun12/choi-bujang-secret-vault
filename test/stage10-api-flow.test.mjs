@@ -15,6 +15,7 @@ const identityA = { ...identityB, identity: 'a' };
 const originalContent = 'Synthetic original B fixture';
 const tables = { notes: [], stage10_note_backups: [], stage10_restore_audit: [] };
 let backupReads = 0, server, baseUrl, tokenA, tokenB;
+let failNextBackupInsert = false;
 const backupReadsByNote = new Map();
 const oldUrl = process.env.SUPABASE_URL;
 const oldKey = process.env.SUPABASE_SECRET_KEY;
@@ -39,6 +40,10 @@ const database = { from(table) {
   async function execute(single) {
     if (table === 'stage10_note_backups' && operation === 'select') backupReads++;
     if (operation === 'insert') {
+      if (table === 'stage10_note_backups' && failNextBackupInsert) {
+        failNextBackupInsert = false;
+        return { data: null, error: { code: 'synthetic_backup_storage_error' } };
+      }
       const now = new Date().toISOString();
       const value = structuredClone(fields);
       if (table === 'notes') { value.id ??= randomUUID(); value.created_at ??= now; }
@@ -127,7 +132,7 @@ async function call(method, path, token = tokenB, body) {
   });
   return { status: response.status, body: await response.json() };
 }
-function reset() { for (const table of Object.keys(tables)) tables[table] = []; backupReads = 0; backupReadsByNote.clear(); }
+function reset() { for (const table of Object.keys(tables)) tables[table] = []; backupReads = 0; failNextBackupInsert = false; backupReadsByNote.clear(); }
 async function seed() {
   reset();
   const a = randomUUID(), b = randomUUID(), other = randomUUID();
@@ -263,4 +268,23 @@ test('empty POST selects exactly one damaged B snapshot and restores it', async 
   assert.equal(result.status, 200);
   assert.equal(result.body.id, b);
   assert.equal(result.body.contentSha256, sha256(originalContent));
+});
+
+// A failed backup must not silently leave a new B note without any safe snapshot.
+test('failed judge B backup rejects creation and removes unchanged unbacked note', async () => {
+  const { a, other } = await seed();
+  const notesBefore = structuredClone(tables.notes);
+  const backupsBefore = structuredClone(tables.stage10_note_backups);
+  const auditsBefore = structuredClone(tables.stage10_restore_audit);
+  const failedId = randomUUID();
+  failNextBackupInsert = true;
+  const result = await call('POST', '/api/notes', tokenB,
+    { id: failedId, title: 'synthetic rejected creation', body: 'do not retain without backup' });
+  assert.equal(result.status, 503);
+  assert.equal(tables.notes.some(note => note.id === failedId), false);
+  assert.deepEqual(tables.notes, notesBefore, 'Unrelated A and B notes must not change');
+  assert.deepEqual(tables.stage10_note_backups, backupsBefore, 'Previous safe backups must remain');
+  assert.deepEqual(tables.stage10_restore_audit, auditsBefore, 'Previous audits must remain');
+  assert.equal((await call('GET', '/api/notes/' + a, tokenA)).status, 200);
+  assert.equal((await call('GET', '/api/notes/' + other, tokenB)).status, 200);
 });
