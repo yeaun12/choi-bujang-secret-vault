@@ -33,5 +33,5 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Run complete stage 10 suite
         run: npm run test:stage10
-      - name: Generate submission bundle
-        run: npm run bundle
+      - name: Explain local-only submission bundle
+        run: echo 'Bundle generation is intentionally local-only because bundle-notes.json is ignored and user-owned. Run npm run bundle on the local checkout before submitting.'
