@@ -35,10 +35,9 @@ test('메모 목록 및 개별 자원 접근을 정확한 메서드·경로로 �
   }
 });
 
-test('허용되지 않은 구역·강사 공지 수정·기능 경로는 거부한다', async () => {
+test('허용되지 않은 구역·기능 경로는 거부한다', async () => {
   const invalid = [
     { method: 'PUT', path: `/api/notices/${id}`, route: 'PUT /api/notices/:id' },
-    { method: 'PUT', path: `/api/instructor-notices/${id}`, route: 'PUT /api/instructor-notices/:id' },
     { method: 'GET', path: `/api/notes/${id}`, route: 'GET /api/notices/:id' },
     { method: 'GET', path: '/api/notes/export', route: 'GET /api/notes/:id' },
     { method: 'POST', path: `/api/notes/${id}`, route: 'POST /api/notes/:id' },
@@ -54,6 +53,21 @@ test('허용되지 않은 구역·강사 공지 수정·기능 경로는 거부�
     assert.equal(decision.decision, 'deny', JSON.stringify(details));
     assert.equal(decision.reasonCode, 'resource_access_denied');
   }
+});
+
+test('강사 공지 수정 경로 분류는 가능하지만 브라우저 역할 주장은 권한 증거가 아니다', async () => {
+  const request = {
+    ...base(), method: 'PUT',
+    path: `/api/instructor-notices/${id}`,
+    route: 'PUT /api/instructor-notices/:id',
+  };
+  const resource = classifyResourceRoute(request);
+  assert.deepEqual(resource, { zone: 'instructor_notice', resourceId: `instructor_notice:${id}` });
+  const withSpoofedRole = { ...request, role: 'instructor', headers: { 'x-role': 'instructor' } };
+  assert.deepEqual(classifyResourceRoute(withSpoofedRole), resource);
+  // The decider cannot verify instructor membership. Authorization is rechecked
+  // by the server API against instructor_memberships (see instructor-notices.test.mjs).
+  assert.equal((await decide(request)).decision, (await decide(withSpoofedRole)).decision);
 });
 
 test('가상 7단계 경로만 특례로 유지하고 운영의 기능 경로로 확장하지 않는다', async () => {
