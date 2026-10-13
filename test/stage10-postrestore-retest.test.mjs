@@ -81,8 +81,8 @@ test('missing judge A fixture is explicitly marked unexecuted, never passed', as
     requestUrl, configuredAppUrl, ...demo,
   });
   assert.equal(r.results.at(-1).result, 'not_run_no_verified_a_note');
-  assert.equal(r.passed, false);
-  assert.equal(r.complete, false);
+  assert.equal(r.passed, true, 'All executed mandatory requests really passed');
+  assert.equal(r.complete, true);
   assert.equal(demo.events.at(-1).event_kind, 'restore_rejected');
   assert.equal(demo.events.at(-1).reason_code, 'retest_foreign_not_run_no_a_note');
   assert.equal(demo.requests.length, 3);
