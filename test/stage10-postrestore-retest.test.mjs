@@ -21,6 +21,7 @@ function setup({ foreign = foreignId, anonymousStatus = 401, content = 'restored
       assert.equal(ownerId, noteScopeOwnerId({ ...B, identity: 'a' }));
       return foreign;
     },
+    findNoteById: async () => null,
     appendAudit: async event => events.push(event),
   };
   const fetchImpl = async (url, opts) => {
@@ -29,7 +30,7 @@ function setup({ foreign = foreignId, anonymousStatus = 401, content = 'restored
       authorized: Boolean(opts.headers.Authorization) });
     if (!opts.headers.Authorization) return Response.json(
       { error: 'Authentication required.' }, { status: anonymousStatus });
-    if (u.pathname.endsWith(foreignId)) return Response.json(
+    if (!u.pathname.endsWith(noteId) && !u.search) return Response.json(
       { error: 'Note not found.' }, { status: 404 });
     if (u.search) return Response.json({ error: 'Invalid note id.' }, { status: 400 });
     return Response.json({ id: noteId, title: 'fixture', body: content });
@@ -43,13 +44,15 @@ test('actual after-restore HTTP normal/denied requests are separately recorded',
     requestUrl, configuredAppUrl, ...demo,
   });
   assert.equal(r.passed, true);
-  assert.deepEqual(r.results.map(x => x.result), ['passed', 'passed', 'passed', 'passed']);
+  assert.deepEqual(r.results.map(x => x.result), ['passed', 'passed', 'passed', 'passed', 'passed']);
   assert.deepEqual(demo.requests.map(x => [x.pathname, x.authorized]), [
     ['/api/notes/' + noteId, true], ['/api/notes/' + noteId, false],
-    ['/api/notes/' + noteId, true], ['/api/notes/' + foreignId, true],
+    ['/api/notes/' + noteId, true],
+    ['/api/notes/' + (r.results[3] && demo.requests[3].pathname.split('/').at(-1)), true],
+    ['/api/notes/' + foreignId, true],
   ]);
   assert.deepEqual(demo.events.map(x => x.event_kind),
-    ['restore_verified', 'restore_verified', 'restore_verified', 'restore_verified']);
+    Array(5).fill('restore_verified'));
   assert.ok(demo.events.every(e => e.owner_id === noteScopeOwnerId(B)));
   assert.equal(JSON.stringify(demo.events).includes('restored text'), false);
   assert.equal(JSON.stringify(demo.events).includes('testsignature'), false);
@@ -80,16 +83,16 @@ test('missing judge A fixture is explicitly marked unexecuted, never passed', as
     identity: B, noteId, expectedSha256, authorization: auth,
     requestUrl, configuredAppUrl, ...demo,
   });
-  assert.equal(r.results.length, 3);
+  assert.equal(r.results.length, 4);
   assert.equal(r.skipped[0].reason, 'not_run_no_verified_a_note');
-  assert.equal(r.executed, 3);
-  assert.equal(r.passedCount, 3);
+  assert.equal(r.executed, 4);
+  assert.equal(r.passedCount, 4);
   assert.equal(r.failedCount, 0);
   assert.equal(r.passed, true, 'All executed mandatory requests really passed');
   assert.equal(r.complete, true);
   assert.equal(demo.events.at(-1).event_kind, 'restore_rejected');
   assert.equal(demo.events.at(-1).reason_code, 'retest_foreign_not_run_no_a_note');
-  assert.equal(demo.requests.length, 3);
+  assert.equal(demo.requests.length, 4);
 });
 test('untrusted user-controlled host or HTTP origin never receives the bearer', async () => {
   for (const bad of [
@@ -119,7 +122,7 @@ test('audit writes fit existing stage 10 DB constraints; no migration required',
     identity: B, noteId, expectedSha256, authorization: auth,
     requestUrl, configuredAppUrl, ...demo,
   });
-  assert.equal(demo.events.length, 4);
+  assert.equal(demo.events.length, 5);
   assert.ok(demo.events.every(x => validKinds.has(x.event_kind)));
   assert.ok(demo.events.every(x => /^retest_[a-z0-9_]{1,57}$/u.test(x.reason_code)));
   assert.equal(demo.events.at(-1).event_kind, 'restore_rejected');
