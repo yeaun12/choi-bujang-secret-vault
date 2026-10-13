@@ -160,6 +160,14 @@ test('full API flow: signed creation, immutable backup, mutation, preview, exact
   assert.equal(result.body.contentSha256, backup.content_sha256);
   assert.equal(result.body.match.all, true);
   assert.equal(result.body.retest.passed, true);
+  assert.equal(result.body.postRestoreRetest.success, true);
+  assert.equal(result.body.postRestoreRetest.executed, 4);
+  assert.equal(result.body.postRestoreRetest.passed, 4);
+  assert.equal(result.body.postRestoreRetest.failed, 0);
+  assert.equal(result.body.postRestoreRetest.normal.length, 1);
+  assert.equal(result.body.postRestoreRetest.forbidden.length, 3);
+  assert.ok([...result.body.postRestoreRetest.normal,
+    ...result.body.postRestoreRetest.forbidden].every(x => Number.isInteger(x.status)));
   assert.deepEqual(result.body.retests.map(check => check.result), ['passed', 'passed', 'passed', 'passed']);
   assert.ok(backupReads >= 6);
   const row = tables.notes.find(note => note.id === b);
