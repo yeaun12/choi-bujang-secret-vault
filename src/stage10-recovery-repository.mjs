@@ -17,6 +17,12 @@ export function stage10Repository(database) {
         .eq('judge_run_id', judge_run_id).eq('identity_label', identity_label)
         .eq('note_id', note_id).eq('owner_id', owner_id).maybeSingle());
     },
+    async findFirstNoteIdByOwner(ownerId) {
+      // Read the ID of the deterministic judge-A zone only, never A's body.
+      const row = ensure(await database.from('notes').select('id')
+        .eq('owner_id', ownerId).limit(1).maybeSingle());
+      return row?.id ?? null;
+    },
     async findNoteById(id) {
       return ensure(await database.from('notes')
         .select('id, owner_id, title, content, created_at').eq('id', id).maybeSingle());
