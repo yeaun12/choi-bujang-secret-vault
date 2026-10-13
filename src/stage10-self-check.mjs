@@ -121,7 +121,7 @@ export async function runStage10SelfChecks() {
       'test/stage10-api-flow.test.mjs',
     ], { cwd: root, env: childEnv, timeout: 30000, maxBuffer: 1024 * 1024, windowsHide: true });
     output = run.stdout;
-    suitePassed = /^# tests 11\s*$/mu.test(output) && /^# fail 0\s*$/mu.test(output);
+    suitePassed = /^# tests 12\s*$/mu.test(output) && /^# fail 0\s*$/mu.test(output);
   } catch { /* Local execution failures are failed checks, not fabricated passes. */ }
   const passed = name => suitePassed && output.split('\n')
     .some(line => line.startsWith('ok ') && line.endsWith(' - ' + name));
@@ -132,6 +132,7 @@ export async function runStage10SelfChecks() {
   const duplicateCreation = passed('duplicate judge B note ID preserves previous snapshots and audit');
   const corruptArchiveDenied = passed('self-consistent but rewritten B backup is rejected against original audit');
   const missingProofDenied = passed('missing creation audit denies restore even when snapshot hash matches');
+  const realHttpRetestRequired = passed('blocked outbound GET after successful restore is a failed retest, never 200');
   const deleted = passed('deleted B note recreated from its original backup, retaining other notes and audit');
   const incomplete = passed('unexecuted optional A check remains unexecuted while real normal and denial tests pass');
   const proofs = readTupleProofs(output);
@@ -148,7 +149,7 @@ export async function runStage10SelfChecks() {
       backupProof ? 'snapshot reads=' + backupProof.snapshotReads + '; version=' + backupProof.version
         + '; stored SHA256=recomputed ' + backupProof.storedSha256
         + '; preview=title/content; missing/corrupt abort.' : 'Missing measured note-backup verification.'],
-    ['stage10_local_postrestore_retests', full && incomplete && postRestoreProof,
+    ['stage10_local_postrestore_retests', full && incomplete && realHttpRetestRequired && postRestoreProof,
       'Execute required normal and forbidden requests after local recovery; unexecuted optional A check is explicitly reported as not run.',
       postRestoreProof
         ? 'After restore A/B own reads 200; cross-owner read/update/delete 404; anonymous read 401; '

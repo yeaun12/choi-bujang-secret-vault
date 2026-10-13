@@ -8,7 +8,6 @@ import {
 } from '../src/stage10-note-recovery.mjs';
 import { stage10Repository } from '../src/stage10-recovery-repository.mjs';
 import { runPostRestoreHttpRetests } from '../src/stage10-postrestore-retest.mjs';
-import { GET as getNoteItem } from './notes/[id].js';
 
 let database = null;
 let verifyLogin = null;
@@ -155,21 +154,19 @@ export async function POST(request) {
       authorization,
       requestUrl: new URL('/api/restore', config.publicAppUrl).href,
       configuredAppUrl: config.publicAppUrl, repository,
-      // Invoke the exact production note GET handler after the DB write.
-      // An outgoing request to the deployment URL can be blocked by Vercel
-      // deployment protection or a cold-start timeout; that would produce
-      // no authenticated/forbidden retest evidence at all. The same handler
-      // executes real authorization, ownership policy and database reads.
-      fetchImpl: (target, init) => getNoteItem(new Request(target, init)),
+      // Use actual outbound HTTP requests to the fixed configured public app URL.
+      // Never replace a blocked or failed request with an internal handler call.
+      // This ensures each reported status was measured over HTTP.
     });
-    trace('restore', retest.passed ? 'ok' : 'retest_failed', 200);
+    trace('retest', retest.passed ? 'passed' : 'failed', retest.passed ? 200 : 503);
     const match = {
       id: result.noteId === result.backup.noteId,
       ownerId: result.ownerId === result.backup.ownerId,
       contentSha256: result.contentSha256 === result.backup.contentSha256,
     };
     return json({
-      restored: true, id: result.noteId, noteId: result.noteId,
+      restored: true, retestVerified: retest.passed,
+      id: result.noteId, noteId: result.noteId,
       ownerId: result.ownerId, owner,
       contentSha256: result.contentSha256, mode: result.mode,
       version: result.backup.version, changes: result.changedFields,
@@ -204,7 +201,7 @@ export async function POST(request) {
       },
       // Only executed HTTP responses are listed as retests.
       retests: retest.results,
-    });
+    }, retest.passed ? 200 : 503);
   } catch {
     // Never leak backup content or raw database errors to external clients.
     trace('restore', 'unavailable', 503);

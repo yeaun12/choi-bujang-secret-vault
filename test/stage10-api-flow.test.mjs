@@ -20,6 +20,9 @@ let failNextAuditInsert = false;
 const backupReadsByNote = new Map();
 const oldUrl = process.env.SUPABASE_URL;
 const oldKey = process.env.SUPABASE_SECRET_KEY;
+const networkFetch = globalThis.fetch;
+let networkRetestRequests = [];
+let failNextNormalRetest = false;
 
 // Implements storage filtering and the atomic RPC transaction boundary.
 const database = {
@@ -165,9 +168,29 @@ before(async () => {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   baseUrl = 'http://127.0.0.1:' + server.address().port;
+  // Exercise actual Node HTTP client/server requests for restore retests.
+  // Only the configured public app origin is mapped to this synthetic local
+  // server. No real external service, credential or production DB is used.
+  globalThis.fetch = (input, init) => {
+    const parsed = new URL(String(input));
+    if (parsed.origin === new URL(config.publicAppUrl).origin) {
+      assert.ok(parsed.pathname.startsWith('/api/notes/'),
+        'Internal retest cannot target arbitrary endpoints');
+      networkRetestRequests.push({ path: parsed.pathname, query: parsed.search,
+        authenticated: Boolean(init?.headers?.Authorization) });
+      if (failNextNormalRetest && init?.headers?.Authorization
+          && parsed.search === '') {
+        failNextNormalRetest = false;
+        return Promise.reject(new Error('synthetic_http_transport_failure'));
+      }
+      return networkFetch(baseUrl + parsed.pathname + parsed.search, init);
+    }
+    return networkFetch(input, init);
+  };
 });
 after(async () => {
   if (server) await new Promise(resolve => server.close(resolve));
+  globalThis.fetch = networkFetch;
   mock.restoreAll();
   if (oldUrl === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = oldUrl;
   if (oldKey === undefined) delete process.env.SUPABASE_SECRET_KEY; else process.env.SUPABASE_SECRET_KEY = oldKey;
@@ -180,7 +203,15 @@ async function call(method, path, token = tokenB, body) {
   });
   return { status: response.status, body: await response.json() };
 }
-function reset() { for (const table of Object.keys(tables)) tables[table] = []; backupReads = 0; failNextBackupInsert = false; failNextAuditInsert = false; backupReadsByNote.clear(); }
+function reset() {
+  for (const table of Object.keys(tables)) tables[table] = [];
+  backupReads = 0;
+  failNextBackupInsert = false;
+  failNextAuditInsert = false;
+  failNextNormalRetest = false;
+  networkRetestRequests = [];
+  backupReadsByNote.clear();
+}
 async function seed() {
   reset();
   const a = randomUUID(), b = randomUUID(), other = randomUUID();
@@ -215,6 +246,11 @@ test('full API flow: signed creation, immutable backup, mutation, preview, exact
   assert.equal(result.body.contentSha256, backup.content_sha256);
   assert.equal(result.body.match.all, true);
   assert.equal(result.body.retest.passed, true);
+  assert.equal(result.body.retestVerified, true);
+  assert.equal(networkRetestRequests.length, 5,
+    'Post-restore checks must use five outbound HTTP requests');
+  assert.equal(networkRetestRequests.filter(x => x.authenticated).length, 4);
+  assert.equal(networkRetestRequests.filter(x => !x.authenticated).length, 1);
   assert.equal(result.body.postRestoreRetest.success, true);
   assert.equal(result.body.postRestoreRetest.executed, 5);
   assert.equal(result.body.postRestoreRetest.passed, 5);
@@ -422,4 +458,26 @@ test('duplicate judge B note ID preserves previous snapshots and audit', async (
     { id: b, title: 'synthetic duplicate', body: 'must not overwrite' });
   assert.equal(result.status, 409);
   assert.deepEqual(tables, before);
+});
+
+test('blocked outbound GET after successful restore is a failed retest, never 200', async () => {
+  const { b } = await seed();
+  const backup = tables.stage10_note_backups.find(row => row.note_id === b);
+  assert.equal((await call('PUT', '/api/notes/' + b, tokenB,
+    { title: 'changed', body: 'modified before restore' })).status, 200);
+  failNextNormalRetest = true;
+  const outcome = await call('POST', '/api/restore', tokenB, { noteId: b });
+  assert.equal(outcome.status, 503, 'Post-restore HTTP verification failure must not return 200');
+  assert.equal(outcome.body.restored, true, 'Restoration itself already happened');
+  assert.equal(outcome.body.retestVerified, false);
+  assert.equal(outcome.body.retest.passed, false);
+  assert.equal(outcome.body.retest.failedCount, 1);
+  assert.equal(outcome.body.retest.normal[0].status, null);
+  assert.equal(outcome.body.retest.normal[0].result, 'failed');
+  assert.equal(networkRetestRequests.length, 5);
+  assert.equal(sha256(tables.notes.find(row => row.id === b).content),
+    backup.content_sha256);
+  assert.ok(tables.stage10_restore_audit.some(row =>
+    row.note_id === b && row.event_kind === 'restore_failed'
+      && /^retest_normal_read_network_fail$/u.test(row.reason_code)));
 });
