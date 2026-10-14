@@ -14,6 +14,7 @@ export const freshChallenge = () => randomBytes(32).toString('base64url');
 export function protectedPath(method, path) {
   if (typeof method !== 'string' || typeof path !== 'string' ||
       path.length > 512 || path.includes('#') || !['GET','POST','PUT','DELETE'].includes(method)) return false;
+  if (path === '/api/war-room') return method === 'GET';
   if (path === '/api/notes') return ['GET','POST'].includes(method);
   if (/^\/api\/notes\/[0-9a-f-]{36}$/iu.test(path)) return ['GET','PUT','DELETE'].includes(method);
   if (path === '/api/instructor-notices') return ['GET','POST'].includes(method);

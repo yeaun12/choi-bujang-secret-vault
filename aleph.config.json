@@ -25,7 +25,8 @@
     "GET /api/instructor-notices",
     "POST /api/instructor-notices",
     "GET /api/instructor-notices/:id",
-    "PUT /api/instructor-notices/:id"
+    "PUT /api/instructor-notices/:id",
+    "GET /api/war-room"
   ],
   "originalApiUrl": "https://vcckkpclsyokvlhwtvej.supabase.co/rest/v1/notes",
   "restoreRoute": "/api/restore"
