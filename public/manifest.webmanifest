@@ -1,0 +1,20 @@
+{
+  "name": "BYTE BACK 안전 접속 자료실",
+  "short_name": "BYTE BACK",
+  "description": "기기 확인과 서버 접근 정책으로 보호하는 개인 자료실",
+  "lang": "ko",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101a28",
+  "theme_color": "#172b3f",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import config from '../../aleph.config.json' with { type: 'json' };
 import { traceStage8Access } from '../../src/stage8-access-trace.mjs';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
+import { requireDeviceProof } from '../../src/stage11-device-proof.mjs';
 import { isJudgeB } from '../../src/stage10-note-recovery.mjs';
 import { createJudgeBNoteAtomic } from '../../src/stage10-atomic-create.mjs';
 import { isExactNoteCollection, isOwnedNoteList, noteScopeOwnerId } from '../../src/resource-api-auth.mjs';
@@ -66,6 +67,8 @@ async function authorize(request) {
     };
   }
 
+  const deviceDenial = await requireDeviceProof(request, identity, supabase);
+  if (deviceDenial) return { response: deviceDenial };
   return { identity };
 }
 
