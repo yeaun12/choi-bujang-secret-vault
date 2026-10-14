@@ -23,3 +23,6 @@ jobs:
       - run: npm run detect:test
       - run: npm run fixture:7
       - run: npm run build -- --local
+      # Clean checkout has no gitignored bundle-notes.json.
+      - run: npm run bundle
+      - run: node -e "const s=require('./artifacts/submission.json'); if(s.step!==12||s.attackAttempts.length!==13||s.attackAttempts.filter(x=>x.observed==='not_run').length!==9)process.exit(1)"
