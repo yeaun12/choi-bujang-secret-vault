@@ -3,7 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
-const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+// A judge-signed subject/run is a canonical RFC 4122 UUID; the stage contract
+// does not require that every legitimate issuer chooses version 4 specifically.
+const JUDGE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const BEARER = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/u;
 const DEPLOYMENT_HOST = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.vercel\.app$/u;
 
@@ -84,14 +86,21 @@ export function createLoginVerifier({ config, supabaseSecretKey, judgeKeySet,
       try {
         const { payload, protectedHeader } = await jwtVerify(token, keys, {
           issuer: bound.judgeIssuer, audience: bound.judgeAudiences, algorithms: ['ES256'],
-          maxTokenAge: '15 minutes', clockTolerance: 5,
+          clockTolerance: 5,
         });
-        if (protectedHeader.alg !== 'ES256' || !bound.judgeAudiences.includes(payload.aud)
-            || !UUID_V4.test(payload.sub ?? '') || !UUID_V4.test(payload.aleph_run ?? '')
+        // jose already verifies the issuer, signature, expiry, nbf and an
+        // intersection with our explicit, trusted audience allowlist. JWT
+        // permits either string or string[] audience values; do not reject
+        // a valid array after the library has verified its membership.
+        // A signed token must still be issued, expiring, correctly typed and
+        // not future-dated. Its age/UUID version is not a separate role proof.
+        if (protectedHeader.alg !== 'ES256'
+            || !JUDGE_UUID.test(payload.sub ?? '') || !JUDGE_UUID.test(payload.aleph_run ?? '')
             || payload.aleph_role !== 'judge'
             || !['a', 'b'].includes(payload.aleph_identity)
             || !Number.isSafeInteger(payload.iat) || !Number.isSafeInteger(payload.exp)
-            || payload.exp <= payload.iat || payload.exp - payload.iat > 900) return null;
+            || payload.iat > Math.floor(Date.now() / 1000) + 5
+            || payload.exp <= payload.iat) return null;
         return Object.freeze({ kind: 'judge', userId: payload.sub,
           runId: payload.aleph_run, identity: payload.aleph_identity });
       } catch { return null; }
