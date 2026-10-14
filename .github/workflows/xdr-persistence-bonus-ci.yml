@@ -1,0 +1,37 @@
+name: XDR-04 bonus checkpoint
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'xdr/persistence/**'
+      - 'xdr/README.md'
+      - 'scripts/xdr-run-persistence.mjs'
+      - 'test/xdr-persistence-bonus.test.mjs'
+      - 'package.json'
+      - '.github/workflows/xdr-persistence-bonus-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run xdr:test
+      - run: npm run test:stage12
+      - run: npm run decider:test
+      - run: npm run detect:test
+      - run: npm run build -- --local
+      - run: npm run xdr:persistence:read
+      - run: npm run xdr:run -- persistence
+      - name: Check official-shaped 8/8/8 result
+        run: node -e "const r=require('./xdr/persistence/result.json'); if(r.schema!=='aleph.xdr.result.v1'||r.moduleKey!=='persistence'||r.decisions.length!==24||r.counts.block!==8||r.counts.alert!==8||r.counts.record!==8)process.exit(1); console.log(r.counts)"
+      - run: npm run xdr:persistence:replay

@@ -49,3 +49,12 @@ node scripts/xdr-run.mjs brute-force
 - `xdr/alerts.log` 기록과 판정기 연결은 `respond.mjs` 같은 다른 파일에서 합니다. `decide.mjs` 는 판단 결과만 돌려줍니다.
 
 인터넷을 끈 상태에서 `npm run xdr:run -- <moduleKey>` 를 돌려도 같은 결과가 나오면 심판에서도 같은 결과가 나옵니다.
+
+## XDR-04 보너스 저장점: Persistence
+
+- `npm run xdr:persistence:read`: 가상 경보 24건에서 시각·출발 주소·계정·규칙 수준·설명만 안전하게 추출합니다. `decide.mjs`와 분리했습니다.
+- `xdr/persistence/patterns.json`: MITRE T1543/T1053 탐지 조건과 근거. 격리 심판은 이를 `decide.mjs`에 내장한 상수로 처리합니다.
+- `npm run xdr:run -- persistence`: `xdr/persistence/result.json` 재생성, 예상 block 8 / alert 8 / record 8. 생성 결과는 판정 코드가 아닙니다.
+- `npm run xdr:persistence:replay`: `respond.mjs`로 로컬 만료형 거부 후보와 알림을 시험합니다. `xdr/alerts.log`, `xdr/persistence/deny-rules.json`은 Git 추적에서 제외합니다.
+- `enforceZtnaDecision(baseDecision, trustedSourceIp)`는 기존 ZTNA 판단 결과 뒤에서 신뢰한 출발지 IP로만 로컬 거부 후보를 적용하는 별도 어댑터입니다. 기존 `src/decider.mjs`와 그 응답 계약은 변경하지 않았습니다. **현재 실제 운영 ingress/SDP 릴레이에는 연결되지 않으며, 운영 사용자 격리의 증거가 아닙니다.**
+- `npm run xdr:test`: 기존 XDR 및 읽기·판정·알림·안전 조건 테스트입니다. 공식 심판 판정은 별도입니다.
