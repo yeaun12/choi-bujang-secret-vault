@@ -1,0 +1,29 @@
+name: Stage 11 PWA and signed device request tests
+on:
+  push:
+    branches:
+      - stage11-pwa-device-status
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:stage11
+      - run: npm run decider:test
+      - run: npm run detect:test
+      - run: npm run fixture:7
+      - run: npm run build -- --local
