@@ -58,3 +58,14 @@ node scripts/xdr-run.mjs brute-force
 - `npm run xdr:persistence:replay`: `respond.mjs`로 로컬 만료형 거부 후보와 알림을 시험합니다. `xdr/alerts.log`, `xdr/persistence/deny-rules.json`은 Git 추적에서 제외합니다.
 - `enforceZtnaDecision(baseDecision, trustedSourceIp)`는 기존 ZTNA 판단 결과 뒤에서 신뢰한 출발지 IP로만 로컬 거부 후보를 적용하는 별도 어댑터입니다. 기존 `src/decider.mjs`와 그 응답 계약은 변경하지 않았습니다. **현재 실제 운영 ingress/SDP 릴레이에는 연결되지 않으며, 운영 사용자 격리의 증거가 아닙니다.**
 - `npm run xdr:test`: 기존 XDR 및 읽기·판정·알림·안전 조건 테스트입니다. 공식 심판 판정은 별도입니다.
+
+## XDR-05 보너스 저장점: Privilege Escalation
+
+- 판정 규칙 위치: `src/decider.mjs`가 기존 ZTNA 접근 결정을 내리며, `docs/DECIDER_REQUEST.md`의 18필드 요청/5필드 응답 계약을 따릅니다. 원본 규칙을 수정하지 않았습니다.
+- `npm run xdr:privilege:read`: 가상 Wazuh 경보 26건을 시각·출발 주소·계정·규칙 수준·설명의 5필드만 출력하고 비밀값처럼 보이는 내용을 마스킹합니다.
+- `xdr/privilege/patterns.json`: MITRE T1068/T1078 기반 관리자 그룹 추가·이례적인 권한 사용·세션 승격 및 추가 조사 조건과 한 줄 근거.
+- `npm run xdr:run -- privilege`: 오프라인 판정기 `xdr/privilege/decide.mjs`만 독립적으로 불러 `result.json` 생성 (기준: block 9, alert 8, record 9). 원본 경보 변경 없음.
+- `npm run xdr:privilege:replay`: `respond.mjs`가 **검증된 block 경보만** 15분 만료형 계정+출발지별 로컬 거부 후보로 보관하고 `xdr/alerts.log`에 정제된 알림 한 줄을 기록합니다. 파일은 Git 추적에서 제외합니다.
+- `enforceZtnaDecision(baseDecision, trustedIdentity)`는 신뢰된 인증 계정 매핑과 출발지 IP가 함께 제공될 때만, 기존 ZTNA 허용 결정을 공식 응답 5개 필드 안에서 거부 결정으로 변경하는 **별도 시험 어댑터**입니다. Wazuh의 `srcuser`를 SDP `subjectId`와 동일하다고 추정하지 않습니다.
+- **제약:** 실제 SDP 릴레이에 연결하지 않았고, 인증 토큰·세션 발급자에 대한 회수 API도 호출하지 않습니다. 따라서 로컬의 세션 거부 후보 9건은 실제 세션 회수 9건을 의미하지 않습니다. 공식 심판 판정도 별도입니다.
+- `npm run xdr:test`: 기존 XDR 6모듈과 보너스 회귀 시험을 모두 실행합니다.
