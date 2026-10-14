@@ -4,7 +4,7 @@ const SHA = /^[a-f0-9]{40}$/iu;
 const HOST = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.vercel\.app$/iu;
 
 export function deploymentIdentity(env, config) {
-  if (config?.step === 10 && (config.restoreRoute !== '/api/restore'
+  if (config?.step >= 10 && (config.restoreRoute !== '/api/restore'
       || !config.allowedRoutes?.includes('POST /api/restore'))) {
     throw new Error('10단계 복구 경로와 POST 허용 경로가 일치해야 합니다.');
   }
@@ -15,7 +15,7 @@ export function deploymentIdentity(env, config) {
   if (env.VERCEL_GIT_PROVIDER !== 'github' || !OWNER.test(owner || '')
       || !REPO.test(repo || '') || repo === '.' || repo === '..'
       || repo.toLowerCase().endsWith('.git') || !SHA.test(commit || '')
-      || !HOST.test(host || '') || ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config?.step)
+      || !HOST.test(host || '') || ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config?.step)
       || typeof config.judgeIssuer !== 'string'
       || !/^https:\/\/[a-z0-9-]+\.up\.railway\.app\/defense\/judge$/iu.test(config.judgeIssuer)
       || typeof config.sampleMarker !== 'string'
@@ -32,6 +32,6 @@ export function deploymentIdentity(env, config) {
     sampleMarker: config.sampleMarker,
     allowedRoutes: config.allowedRoutes,
     originalApiUrl: config.originalApiUrl,
-    ...(config.step === 10 ? { restoreRoute: config.restoreRoute } : {}),
+    ...(config.step >= 10 ? { restoreRoute: config.restoreRoute } : {}),
   };
 }
