@@ -17,6 +17,7 @@ const tables = { notes: [], stage10_note_backups: [], stage10_restore_audit: [] 
 let backupReads = 0, server, baseUrl, tokenA, tokenB;
 let failNextBackupInsert = false;
 let failNextAuditInsert = false;
+let failNextRetestAuditInsert = false;
 const backupReadsByNote = new Map();
 const oldUrl = process.env.SUPABASE_URL;
 const oldKey = process.env.SUPABASE_SECRET_KEY;
@@ -91,6 +92,11 @@ const database = {
   async function execute(single) {
     if (table === 'stage10_note_backups' && operation === 'select') backupReads++;
     if (operation === 'insert') {
+      if (table === 'stage10_restore_audit' && failNextRetestAuditInsert
+          && typeof fields?.reason_code === 'string' && fields.reason_code.startsWith('retest_')) {
+        failNextRetestAuditInsert = false;
+        return { data: null, error: { code: 'synthetic_postrestore_audit_write_failed' } };
+      }
       if (table === 'stage10_note_backups' && failNextBackupInsert) {
         failNextBackupInsert = false;
         return { data: null, error: { code: 'synthetic_backup_storage_error' } };
@@ -208,6 +214,7 @@ function reset() {
   backupReads = 0;
   failNextBackupInsert = false;
   failNextAuditInsert = false;
+  failNextRetestAuditInsert = false;
   failNextNormalRetest = false;
   networkRetestRequests = [];
   backupReadsByNote.clear();
@@ -480,4 +487,37 @@ test('blocked outbound GET after successful restore is a failed retest, never 20
   assert.ok(tables.stage10_restore_audit.some(row =>
     row.note_id === b && row.event_kind === 'restore_failed'
       && /^retest_normal_read_network_fail$/u.test(row.reason_code)));
+});
+
+// A post-restore audit exception must never claim that an already persisted
+// restoration failed. Retest evidence remains explicitly unverified.
+test('retest audit write failure preserves truthful restored result without fabricated retest success', async () => {
+  const { b, other } = await seed();
+  const backup = structuredClone(tables.stage10_note_backups.find(row => row.note_id === b));
+  const otherBefore = structuredClone(tables.notes.find(row => row.id === other));
+  assert.equal((await call('PUT', '/api/notes/' + b, tokenB,
+    { title: 'synthetic attack', body: 'altered after backup' })).status, 200);
+  failNextRetestAuditInsert = true;
+  const outcome = await call('POST', '/api/restore', tokenB, { noteId: b });
+  assert.equal(outcome.status, 503, 'Unverified post-restore audit cannot return success');
+  assert.equal(outcome.body.restored, true, 'Restoration already committed: must not say false');
+  assert.equal(outcome.body.retestVerified, false, 'Missing audit evidence cannot be a passed retest');
+  assert.equal(outcome.body.error, 'retest_evidence_unavailable');
+  assert.equal(outcome.body.retest?.evidenceUnavailable, true);
+  assert.equal(outcome.body.retest?.executed, null, 'Unpersisted outcomes cannot be counted as zero');
+  assert.deepEqual(outcome.body.retests, [], 'Never invent unverified HTTP status evidence');
+  assert.equal(outcome.body.match?.all, true, 'Restored record must still be provably original');
+  assert.equal(outcome.body.backup?.contentSha256, backup.content_sha256);
+  assert.equal(outcome.body.id, backup.note_id);
+  assert.equal(outcome.body.ownerId, backup.owner_id);
+  assert.equal(outcome.body.contentSha256, backup.content_sha256);
+  assert.ok(!outcome.body.postRestoreRetest?.success, 'No fabricated success');
+  assert.equal(sha256(tables.notes.find(row => row.id === b).content), backup.content_sha256);
+  assert.deepEqual(tables.notes.find(row => row.id === other), otherBefore);
+  assert.ok(tables.stage10_restore_audit.some(row =>
+    row.note_id === b && row.event_kind === 'restore_verified'
+    && row.reason_code === 'repaired'));
+  assert.ok(!tables.stage10_restore_audit.some(row =>
+    row.note_id === b && row.reason_code?.startsWith('retest_')),
+    'Do not claim missing retest audit evidence was persisted');
 });

@@ -147,25 +147,16 @@ export async function POST(request) {
       trace('restore', result.code, result.status);
       return json({ error: result.code, restored: false }, result.status);
     }
-    // Real requests through the deployed note handler (in-process, no token
-    // leaves this function). Failures are reported, never rewritten as passes.
-    const retest = await runPostRestoreHttpRetests({
-      identity, noteId: result.noteId, expectedSha256: result.contentSha256,
-      authorization,
-      requestUrl: new URL('/api/restore', config.publicAppUrl).href,
-      configuredAppUrl: config.publicAppUrl, repository,
-      // Use actual outbound HTTP requests to the fixed configured public app URL.
-      // Never replace a blocked or failed request with an internal handler call.
-      // This ensures each reported status was measured over HTTP.
-    });
-    trace('retest', retest.passed ? 'passed' : 'failed', retest.passed ? 200 : 503);
+    // Once restoreOneJudgeBNote returns 200, the persisted note and backup
+    // tuple have already been verified. Later audit/HTTP failures must never
+    // retroactively claim that the restoration itself did not happen.
     const match = {
       id: result.noteId === result.backup.noteId,
       ownerId: result.ownerId === result.backup.ownerId,
       contentSha256: result.contentSha256 === result.backup.contentSha256,
     };
-    return json({
-      restored: true, retestVerified: retest.passed,
+    const restoredEvidence = {
+      restored: true,
       id: result.noteId, noteId: result.noteId,
       ownerId: result.ownerId, owner,
       contentSha256: result.contentSha256, mode: result.mode,
@@ -175,6 +166,37 @@ export async function POST(request) {
         creationAuditVerified: true, creationAuditRereadBeforeRestore: true },
       match: { ...match, all: match.id && match.ownerId && match.contentSha256 },
       scope: { restoredNotes: 1, otherNotesTouched: 0, auditPreserved: true },
+    };
+    let retest;
+    try {
+      // Real HTTP calls to the fixed production origin, not in-process GETs.
+      // An audit write failure means retest evidence is unavailable, even if
+      // some HTTP requests completed. Never infer their results or counts.
+      retest = await runPostRestoreHttpRetests({
+        identity, noteId: result.noteId, expectedSha256: result.contentSha256,
+        authorization,
+        requestUrl: new URL('/api/restore', config.publicAppUrl).href,
+        configuredAppUrl: config.publicAppUrl, repository,
+      });
+    } catch {
+      trace('retest', 'evidence_unavailable', 503);
+      return json({
+        ...restoredEvidence,
+        error: 'retest_evidence_unavailable',
+        retestVerified: false,
+        retest: { passed: false, complete: false, evidenceUnavailable: true,
+          executed: null, passedCount: null, failedCount: null,
+          normal: [], forbidden: [], notRun: [], skipped: [] },
+        postRestoreRetest: { success: false, evidenceUnavailable: true,
+          executed: null, passed: null, failed: null,
+          normal: [], forbidden: [], notRun: [] },
+        retests: [],
+      }, 503);
+    }
+    trace('retest', retest.passed ? 'passed' : 'failed', retest.passed ? 200 : 503);
+    return json({
+      ...restoredEvidence,
+      retestVerified: retest.passed,
       retest: {
         passed: retest.passed,
         complete: retest.complete,
