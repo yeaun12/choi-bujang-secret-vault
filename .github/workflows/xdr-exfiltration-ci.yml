@@ -1,0 +1,27 @@
+name: XDR-06 exfiltration offline checks
+on:
+  pull_request:
+    branches: [xdr05-privilege-20261014, main]
+    paths:
+      - 'xdr/exfiltration/**'
+      - 'test/xdr-exfiltration.test.mjs'
+      - 'package.json'
+      - '.github/workflows/xdr-exfiltration-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run xdr:test
+      - run: npm run xdr:run -- exfiltration
+      - name: Validate replay counts and schema
+        run: node -e "const r=require('./xdr/exfiltration/result.json'); if(r.schema!=='aleph.xdr.result.v1'||r.decisions.length!==30||r.counts.block!==10||r.counts.alert!==10||r.counts.record!==10)process.exit(1)"
