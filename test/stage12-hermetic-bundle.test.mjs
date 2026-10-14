@@ -11,8 +11,8 @@ test('stage 12 bundle points to the isolated entry, not the legacy bundle', () =
 });
 test('stage 12 entry uses only allowed modules and does not load legacy checkers', () => {
   const imports = [...source.matchAll(/^import .* from ['"]([^'"]+)['"];?$/gmu)].map(x => x[1]);
-  assert.deepEqual(imports, ['node:child_process', 'node:fs', 'node:path', '../src/decider.mjs']);
-  assert.doesNotMatch(source, /import\(|require\(|stage10-self-check|attack-check|bundle-entry|bundle\.mjs/u);
+  assert.deepEqual(imports, ['node:fs', 'node:path', '../src/decider.mjs']);
+  assert.doesNotMatch(source, /import\(|require\(|stage10-self-check|attack-check|bundle-entry|from ['"][^'"]*\/bundle\.mjs/u);
   assert.doesNotMatch(source, /node:os|node:util|node:net|node:tls|node:http|node:https/u);
 });
 test('isolation is GET-only, has no credentials, and preserves unexecuted checks', () => {
@@ -23,11 +23,15 @@ test('isolation is GET-only, has no credentials, and preserves unexecuted checks
   assert.match(source, /official 41-case assault has not been independently verified/u);
   assert.match(source, /new URL\(path, app\)\.href/u);
 });
-test('only permitted Git reads are used; no git config, status, -C, or extra processes', () => {
-  assert.match(source, /readGit\('rev-parse', 'HEAD'\)/u);
-  assert.match(source, /readGit\('show', '--first-parent', '--format=', '--name-only', 'HEAD'\)/u);
-  assert.doesNotMatch(source, /readGit\('(?:status|diff|config|remote|rev-list)'|'-C'/u);
-  assert.equal((source.match(/execFileSync\(/gu) || []).length, 1);
+test('sandbox bundle launches zero subprocesses and reads checkout identity from fs', () => {
+  assert.match(source, /function currentCommitFromCheckout\(/u);
+  assert.match(source, /join\(gitDir, 'HEAD'\)/u);
+  assert.match(source, /packed-refs/u);
+  assert.doesNotMatch(source, /node:child_process|execFileSync|spawn|readGit\(/u);
+  assert.deepEqual([...source.matchAll(/'([^']+\.mjs)'/gu)].map(x => x[1])
+    .filter(x => x.startsWith('scripts/') || x.startsWith('test/')), [
+      'scripts/stage12-isolated-bundle.mjs', 'test/stage12-hermetic-bundle.test.mjs',
+    ]);
 });
 test('fresh checkout requires only committed config, not private ignored bundle notes', () => {
   assert.match(source, /aleph\.config\.json/u);
