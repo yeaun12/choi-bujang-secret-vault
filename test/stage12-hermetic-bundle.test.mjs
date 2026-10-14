@@ -26,7 +26,7 @@ test('isolation is GET-only, has no credentials, and preserves unexecuted checks
 test('only permitted Git reads are used; no git config, status, -C, or extra processes', () => {
   assert.match(source, /readGit\('rev-parse', 'HEAD'\)/u);
   assert.match(source, /readGit\('show', '--first-parent', '--format=', '--name-only', 'HEAD'\)/u);
-  assert.doesNotMatch(source, /readGit\('(?:status|diff|config|remote|rev-list)'|'\-C'/u);
+  assert.doesNotMatch(source, /readGit\('(?:status|diff|config|remote|rev-list)'|'-C'/u);
   assert.equal((source.match(/execFileSync\(/gu) || []).length, 1);
 });
 test('fresh checkout requires only committed config, not private ignored bundle notes', () => {
