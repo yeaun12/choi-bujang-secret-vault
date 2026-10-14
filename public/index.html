@@ -3,7 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BYTE BACK | 개인 자료실</title>
+  <title>BYTE BACK | 안전 접속 자료실</title>
+  <meta name="theme-color" content="#172b3f">
+  <meta name="application-name" content="BYTE BACK">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/app-icon.svg">
 
   <style>
     :root {
@@ -174,6 +180,36 @@
       margin-top: 16px;
     }
 
+    .app-status {
+      display: grid;
+      gap: 12px;
+      padding: 18px 20px;
+      border: 1px solid #567588;
+      border-radius: 14px;
+      background: #1a3043;
+    }
+
+    .app-status strong {
+      color: #e9f7ff;
+      font-size: 17px;
+    }
+
+    .app-status p {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .app-status .device-status {
+      padding: 9px 12px;
+      border-radius: 8px;
+      background: #122539;
+      color: #d6e8f8;
+    }
+
+    .app-status button {
+      margin-top: 3px;
+    }
+
     [hidden] {
       display: none !important;
     }
@@ -182,7 +218,7 @@
 
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 5단계 서버 경유 자료실</div>
+    <div class="eyebrow">BYTE BACK · 11단계 설치형 안전 접속</div>
 
     <h1>개인 자료실</h1>
 
@@ -190,6 +226,16 @@
       로그인과 자료 요청은 서버 함수를 통해 처리하고,
       검증된 사용자만 자신의 가상 자료를 만들고 관리할 수 있습니다.
     </p>
+
+    <section class="app-status" aria-labelledby="access-app-title">
+      <strong id="access-app-title">안전 접속 앱</strong>
+      <p>이 화면은 브라우저에서 설치할 수 있는 웹앱입니다. 앱 설치 자체는 기기 승인이나 자료 접근 권한을 뜻하지 않습니다.</p>
+      <p id="device-approval-status" class="device-status" role="status" aria-live="polite">기기 승인 상태: 서버 검증 전</p>
+      <p id="network-status" role="status">연결 상태를 확인하는 중입니다.</p>
+      <p>오프라인에서는 보호 자료를 표시하지 않습니다. 온라인에서 서버의 승인을 확인해야 합니다.</p>
+      <button type="button" id="install-app-button" class="secondary" hidden>앱 설치</button>
+      <p id="install-message" class="message" role="status"></p>
+    </section>
 
     <section class="panel" aria-labelledby="auth-title">
       <h2 id="auth-title">계정</h2>
@@ -299,6 +345,65 @@
     let currentSession = null;
     let refreshInFlight = null;
 
+    const deviceApprovalStatus =
+      document.querySelector('#device-approval-status');
+
+    const networkStatus =
+      document.querySelector('#network-status');
+
+    const installAppButton =
+      document.querySelector('#install-app-button');
+
+    const installMessage =
+      document.querySelector('#install-message');
+
+    // Device approval is never inferred from installation or a browser flag.
+    // The server authorization flow is connected in stage 11 task 2.
+    let deferredInstallPrompt = null;
+
+    function setDeviceApprovalMessage(text) {
+      deviceApprovalStatus.textContent = text;
+    }
+
+    function updateNetworkStatus() {
+      networkStatus.textContent = navigator.onLine
+        ? '온라인: 보호 자료는 서버에서만 확인합니다.'
+        : '오프라인: 보호 자료를 열 수 없습니다.';
+    }
+
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+    updateNetworkStatus();
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      installAppButton.hidden = false;
+    });
+
+    installAppButton.addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
+      installAppButton.hidden = true;
+      const prompt = deferredInstallPrompt;
+      deferredInstallPrompt = null;
+      await prompt.prompt();
+      installMessage.textContent =
+        '설치 결과와 관계없이 기기는 서버에서 별도로 승인해야 합니다.';
+    });
+
+    window.addEventListener('appinstalled', () => {
+      installAppButton.hidden = true;
+      installMessage.textContent =
+        '앱이 설치되었습니다. 설치 상태는 기기 승인 증거가 아닙니다.';
+    });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {
+        installMessage.textContent =
+          '오프라인 안내를 준비하지 못했습니다. 온라인으로 다시 접속해 주세요.';
+      });
+    }
+
     const loginForm =
       document.querySelector('#login-form');
 
@@ -357,6 +462,7 @@
     }
 
     function showLoggedOut() {
+      setDeviceApprovalMessage('기기 승인 상태: 로그인 전 · 서버 확인 필요');
       loginForm.hidden = false;
       loggedIn.hidden = true;
       createPanel.hidden = true;
@@ -370,6 +476,7 @@
     }
 
     function showLoggedIn() {
+      setDeviceApprovalMessage('기기 승인 상태: 서버 검증 전 (설치 여부와 무관)');
       loginForm.hidden = true;
       loggedIn.hidden = false;
       createPanel.hidden = false;
