@@ -16,16 +16,16 @@ test('stage 12 entry uses only allowed modules and does not load legacy checkers
   assert.doesNotMatch(source, /node:os|node:util|node:net|node:tls|node:http|node:https/u);
 });
 test('unverifiable API GETs are not executed or claimed as observed', () => {
-  assert.doesNotMatch(source, /\\bfetch\\(|\\bpublicGet\\b|\\bobservedGet\\b|method: 'POST'|method: 'PUT'|method: 'DELETE'/u);
+  assert.doesNotMatch(source, /\bfetch\(|\bpublicGet\b|\bobservedGet\b|method: 'POST'|method: 'PUT'|method: 'DELETE'/u);
   assert.doesNotMatch(source, /Authorization:|Bearer [A-Za-z0-9._-]{12,}|https:\/\/.*@/u);
-  assert.equal((source.match(/^  notRun\\('/gmu) || []).length, 13);
+  assert.equal((source.match(/^  notRun\('/gmu) || []).length, 13);
   for (const id of [
     'static_note_file_removed',
     'anonymous_note_list_denied',
     'anonymous_instructor_notice_read_denied',
     'anonymous_war_room_read_denied',
   ]) {
-    assert.match(source, new RegExp('notRun\\\\(\\u0027' + id + '\\u0027', 'u'));
+    assert(source.includes("  notRun('" + id + "'"));
   }
   assert.match(source, /observed: 'not_run'/u);
   assert.match(source, /official 41-case assault has not been independently verified/u);
