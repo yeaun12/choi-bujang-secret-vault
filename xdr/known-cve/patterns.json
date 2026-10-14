@@ -1,0 +1,17 @@
+{
+  "moduleKey": "known-cve",
+  "patterns": [
+    {
+      "name": "log4shell_remote_jndi_lookup",
+      "technique": "T1190",
+      "classification": "block",
+      "evidence": "Complete JNDI remote-lookup syntax in request data, source address and high-severity rule"
+    },
+    {
+      "name": "cve_context_needs_review",
+      "technique": "T1190",
+      "classification": "alert",
+      "evidence": "T1190-labelled anomaly without confirmed exploit syntax, or incomplete source/severity context"
+    }
+  ]
+}
