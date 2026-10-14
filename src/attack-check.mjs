@@ -116,6 +116,81 @@ export async function runAttackChecks(config) {
     }
   );
 
+  // Stage 12 judge sandbox: do not issue POST/PUT/DELETE or launch local
+  // test suites. Only public HTTPS GET/HEAD are supported by the judge.
+  // Each skipped write/recovery test remains explicitly not_run.
+  if (config.step === 12) {
+    const anonymousDenied = await hasJsonError(apiResponse);
+    const invalidTokenResponse = await fetch(new URL('/api/notes', app), {
+      headers: { Authorization: 'Bearer bad.token.value' },
+      redirect: 'error', signal: AbortSignal.timeout(10000),
+    });
+    const invalidTokenDenied = await hasJsonError(invalidTokenResponse);
+    const noticeResponse = await fetch(new URL('/api/instructor-notices', app), {
+      redirect: 'error', signal: AbortSignal.timeout(10000),
+    });
+    const noticeDenied = await hasJsonError(noticeResponse);
+    const roomResponse = await fetch(new URL('/api/war-room', app), {
+      redirect: 'error', signal: AbortSignal.timeout(10000),
+    });
+    const roomDenied = roomResponse.status === 401 && await hasJsonError(roomResponse);
+    const notRun = (attackId, expected) => ({ attackId, expected, observed: 'not_run' });
+
+    return [
+      {
+        attackId: 'static_note_file_removed',
+        expected: 'Public static note data must not be deployed.',
+        observed: staticRemoved
+          ? `Static data file is absent (HTTP ${staticResponse.status}).`
+          : `Static data file is still reachable (HTTP ${staticResponse.status}).`,
+      },
+      {
+        attackId: 'anonymous_note_list_denied',
+        expected: 'Anonymous note-list GET is denied with a JSON authentication error.',
+        observed: anonymousDenied
+          ? `Anonymous note-list GET denied with JSON (HTTP ${apiResponse.status}).`
+          : `Anonymous note-list denial not verified (HTTP ${apiResponse.status}).`,
+      },
+      notRun('anonymous_note_create_denied',
+        'Anonymous note creation POST must be denied; write requests are forbidden in the stage 12 bundle sandbox.'),
+      {
+        attackId: 'invalid_login_token_denied',
+        expected: 'A malformed bearer token cannot read the note API.',
+        observed: invalidTokenDenied
+          ? `Malformed login token denied with JSON (HTTP ${invalidTokenResponse.status}).`
+          : `Malformed login token denial not verified (HTTP ${invalidTokenResponse.status}).`,
+      },
+      {
+        attackId: 'anonymous_instructor_notice_read_denied',
+        expected: 'Anonymous instructor-notice GET is denied with JSON authentication error.',
+        observed: noticeDenied
+          ? `Anonymous notice-list GET denied with JSON (HTTP ${noticeResponse.status}).`
+          : `Anonymous notice-list denial not verified (HTTP ${noticeResponse.status}).`,
+      },
+      notRun('anonymous_instructor_notice_create_denied',
+        'Anonymous notice creation POST must be denied; write requests are forbidden in the stage 12 bundle sandbox.'),
+      notRun('anonymous_note_restore_denied',
+        'Anonymous restore POST must be denied; write requests are forbidden in the stage 12 bundle sandbox.'),
+      notRun('stage10_safe_policy_backup_verified',
+        'Historical local policy backup check; not re-executed inside the stage 12 restricted bundle sandbox.'),
+      notRun('stage10_isolated_policy_restored',
+        'Historical isolated policy restoration; local file mutations are forbidden in the stage 12 sandbox.'),
+      notRun('stage10_local_backup_readback',
+        'Historical local backup readback test; child test-runner and local fixture checks are not allowed.'),
+      notRun('stage10_local_restore_tuple_match',
+        'Historical local restoration tuple test; child test-runner and local fixture checks are not allowed.'),
+      notRun('stage10_local_postrestore_retests',
+        'Historical local post-restore retests; child test-runner and local fixture checks are not allowed.'),
+      {
+        attackId: 'anonymous_war_room_read_denied',
+        expected: 'Anonymous war-room GET is refused with JSON HTTP 401.',
+        observed: roomDenied
+          ? `Anonymous war-room GET denied with JSON (HTTP ${roomResponse.status}).`
+          : `Anonymous war-room denial not verified (HTTP ${roomResponse.status}).`,
+      },
+    ];
+  }
+
   if (config.step === 2) {
     let anonymousApiVisible = false;
 
