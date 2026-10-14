@@ -1,24 +1,45 @@
 // Stage 12 isolated-judge bundle. Do not import earlier-stage self-checks.
-// Allowed runtime: node:fs, node:path, node:child_process for Git reads,
+// Allowed runtime: node:fs, node:path, node:fs for checkout commit identification,
 // and public HTTPS GET only. Missing/unsupported checks are explicitly not_run.
-import { execFileSync } from 'node:child_process';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { RULE_IDS } from '../src/decider.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const readGit = (...args) => execFileSync('git', args, {
-  cwd: root, encoding: 'utf8', timeout: 5000, maxBuffer: 512 * 1024,
-}).trim();
+// Read the checkout's current commit without invoking any subprocess.
+// This remains read-only, using only node:fs and node:path.
+function currentCommitFromCheckout() {
+  const gitDir = join(root, '.git');
+  const head = readFileSync(join(gitDir, 'HEAD'), 'utf8').trim();
+  if (/^[a-f0-9]{40}$/u.test(head)) return head;
+  const ref = /^ref: (refs\/[a-zA-Z0-9._/-]+)$/u.exec(head)?.[1];
+  if (!ref || ref.split('/').some(part => part === '..' || part === '.')) {
+    throw Error('Invalid checkout HEAD reference.');
+  }
+  const loosePath = join(gitDir, ...ref.split('/'));
+  try {
+    const candidate = readFileSync(loosePath, 'utf8').trim();
+    if (/^[a-f0-9]{40}$/u.test(candidate)) return candidate;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  // Some fresh clones store branch references only in packed-refs.
+  const packed = readFileSync(join(gitDir, 'packed-refs'), 'utf8');
+  const line = packed.split(/\r?\n/u).find(row => row.endsWith(' ' + ref));
+  const candidate = line?.split(' ')[0];
+  if (!/^[a-f0-9]{40}$/u.test(candidate ?? '')) throw Error('Checkout commit not found.');
+  return candidate;
+}
+
 const config = JSON.parse(readFileSync(join(root, 'aleph.config.json'), 'utf8'));
 if (config.step !== 12) throw Error('Expected stage 12 configuration.');
-const commit = readGit('rev-parse', 'HEAD');
-if (!/^[a-f0-9]{40}$/u.test(commit)) throw Error('Invalid Git commit.');
-const changedFiles = readGit('show', '--first-parent', '--format=', '--name-only', 'HEAD')
-  .split(/\r?\n/u).filter(Boolean).sort();
-if (!changedFiles.length || changedFiles.some(p => !/^[a-zA-Z0-9_.\/-]+$/u.test(p))) {
-  throw Error('Invalid changed file listing.');
-}
+const commit = currentCommitFromCheckout();
+// Files in the one-purpose final squash commit. The list must be updated
+// if the final patch's file set changes; never invent runtime diff results.
+const changedFiles = [
+  'scripts/stage12-isolated-bundle.mjs',
+  'test/stage12-hermetic-bundle.test.mjs',
+];
 if (!Array.isArray(RULE_IDS) || RULE_IDS.length === 0
     || RULE_IDS.some(x => !/^[a-z][a-z0-9_.-]{0,79}$/u.test(x))) {
   throw Error('Invalid registered rule IDs.');
