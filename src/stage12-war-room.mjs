@@ -90,5 +90,8 @@ export function redactWarRoomLog(result) {
     recoveryStatus: result.recovery.status,
     backupCount: result.recovery.backupCount,
     auditCount: result.recovery.auditCount,
+    latestBackupVersion: result.recovery.latestBackupVersion,
+    latestAuditKind: result.recovery.latestAuditKind,
+    latestAuditAt: result.recovery.latestAuditAt,
   };
 }

@@ -38,6 +38,9 @@ test('restore version and redacted logs follow real count, time, and kind', () =
   const logs = redactWarRoomLog(report);
   assert.equal(logs.backupCount, report.recovery.backupCount);
   assert.equal(logs.auditCount, report.recovery.auditCount);
+  assert.equal(logs.latestBackupVersion, report.recovery.latestBackupVersion);
+  assert.equal(logs.latestAuditAt, report.recovery.latestAuditAt);
+  assert.equal(logs.latestAuditKind, report.recovery.latestAuditKind);
   assert.equal(logs.requestId, report.requestId);
   assert.doesNotMatch(JSON.stringify({ report, logs }), /DO NOT LEAK|secret-owner|secret-hash/);
 });

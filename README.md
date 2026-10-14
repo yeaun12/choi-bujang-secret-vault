@@ -1,8 +1,8 @@
 # BYTE BACK 방어전 시작 틀 R5
 
-## 12단계: 탈환 작전실을 완성합니다 — 제작 1~3 구현 기록
+## 12단계: 탈환 작전실을 완성합니다 — 저장점 구현 및 재현 절차
 
-**작성 기준:** 12단계 작업 브랜치 `stage12-warroom-work`의 제작 1·2 검토 커밋 `8dd8a6d6a4abf036d70123bb47b78a1c931554e6`에 기반한 실행 안내입니다. 최종 12단계 저장점·Production 배포·공식 41종 총공세 판정은 이 시점에 완료되지 않았습니다. 이 문서 작성 시 설정 `aleph.config.json.step=11`은 **12단계 최종 저장점 전의 임시 상태**이며 제출 전 12로 갱신해야 합니다.
+**작성 기준:** 12단계 작업 브랜치 `stage12-warroom-work`의 최신 소스입니다. `aleph.config.json.step=12`와 `GET /api/war-room` 허용 경로를 반영했습니다. **12단계 Production 배포·실제 UI/API 교차 실측·공식 41종 총공세 판정은 아직 완료되지 않았습니다.** 최종 제출 전 배포 커밋과 제출 묶음 커밋을 대조해야 합니다.
 
 ### 기능과 근거의 범위
 
@@ -28,7 +28,7 @@
 
 1. 새 PC에서는 `git clone https://github.com/yeaun12/choi-bujang-secret-vault.git` 후 `cd choi-bujang-secret-vault`를 실행합니다. 기존 PC에서는 `git status --short`로 변경 사항을 먼저 확인하고, 작업 브랜치에 맞춰 `git pull --ff-only origin stage12-warroom-work`를 실행합니다. **최종 제출 때는 12단계 저장점 커밋을 `git log -1 --oneline`으로 재확인**합니다.
 2. Node.js 22 이상에서 `npm install`(재현 가능한 잠금 파일 설치에는 `npm ci`)을 실행합니다. 설치 시 저장소에 실제 사용자 토큰이나 서버 전용 설정값을 추가하지 않습니다.
-3. `npm run decider:test` → `npm run detect:test` → `npm run test:stage11` → `npm run test:stage12-war-room` → `npm run test:stage12-matrix` → `npm run build -- --local` 순서로 실행합니다. **로컬 테스트는 가상 요청을 대상으로 하며 실제 심판 판정이 아닙니다.** `npm run build -- --local`은 정적 자산을 검사할 뿐 API 서버를 로컬에서 실행하지 않습니다.
+3. `npm run decider:test` → `npm run detect:test` → `npm run test:stage11` → `npm run test:stage12-war-room` → `npm run test:stage12-matrix` → `npm run test:stage12` → `npm run build -- --local` 순서로 실행합니다. **로컬 테스트는 가상 요청을 대상으로 하며 실제 심판 판정이 아닙니다.** `npm run build -- --local`은 정적 자산을 검사할 뿐 API 서버를 로컬에서 실행하지 않습니다.
 4. 실제 자료실과 `api/*` 서버리스 함수를 실행하는 환경은 **Vercel Production**입니다. 프로젝트가 올바른 Git 커밋과 서버 전용 환경변수 설정으로 배포되어야 동작합니다. Production 주소: `https://choi-bujang-secret-vault-blush.vercel.app/`. 사용자는 로그인 → 기기 등록·승인 → 기기 서명으로 자료실 열기 → 탈환 작전실 `실제 서버 요약 조회` → `안전한 조회만 실측` 순서로 확인합니다. **현재 Production은 11단계 배포이며 12단계 배포 전에는 새 화면이 보이지 않는 것이 정상입니다.**
 5. `api/war-room.js` 응답의 `requestId`, `observedAt`, `recovery.backupCount`, `recovery.auditCount`를 가린 서버 기록의 `s12_war_room_snapshot`과 대조합니다. 등록된 기기가 없는 학생 요청·익명 요청은 각각 정상 자료 접근이 거부되어야 합니다. 개인 메모의 본문이나 인증 토큰을 로그에 복사하지 않습니다.
 
@@ -42,10 +42,10 @@
 
 ### 제출 전 증거 구분과 보안
 
-- 현재 직접 실행·보고된 항목: 제작 1 단위 테스트 **4/4**, 제작 2 단위 테스트 **5/5**; GitHub Actions 기존 10단계 **73/73**, 11단계 **81/81**. 이는 **코드의 회귀 검증**이지 41종 실제 공격 총공세 성공이 아닙니다.
+- 현재 직접 실행·보고된 항목: 제작 1 단위 테스트 **4/4**, 제작 2 단위 테스트 **5/5**; GitHub Actions 기존 10단계 **73/73**, 11단계 **81/81**. 12단계 저장점 변경 후 `npm run test:stage12`는 별도로 실행해야 합니다. 이는 **코드의 회귀 검증**이지 41종 실제 공격 총공세 성공이 아닙니다.
 - **미실행:** 새 12단계 Production UI 수치·서버 로그 대조, 12단계 정상 및 차단 실제 API 교차 시험, ALEPH SDP 엔진과 운영 탐지/회수 연계, 41종 공식 총공세. 실행한 뒤에만 수치·시각·상태를 갱신합니다.
 - 실제 비밀번호·JWT·서버 키·기기 개인키·연락처·메모 본문은 README·Git·시험표·제출 JSON에 포함하지 않습니다. `SUPABASE_URL`과 `SUPABASE_SECRET_KEY` 등 서버 전용 설정은 **사용자가 Vercel 비밀 환경변수로 별도 관리**합니다. 이 문서는 키 값을 제공하거나 요구하지 않습니다.
-- 마지막 12단계 저장점에서 `aleph.config.json.step=12`, `public/aleph.json` 배포 식별 정보, `GET /api/war-room` 허용 경로, 엔진 요청 규칙, Production 커밋·서버 근거를 재검증한 뒤 `npm run bundle`로 로컬 `artifacts/submission.json`을 만듭니다. `bundle-notes.json`과 `artifacts/submission.json`을 커밋하지 않습니다.
+- 현재 `aleph.config.json.step=12`이고 빌드·배포 식별·자기 점검 스크립트에 12단계 지원을 추가했습니다. **Production 배포 이후** `public/aleph.json` 커밋과 작전실 화면/서버 실측 수치를 대조한 뒤 `npm run bundle`로 로컬 `artifacts/submission.json`을 만듭니다. `bundle-notes.json`과 `artifacts/submission.json`을 커밋하지 않습니다.
 
 ---
 
@@ -80,7 +80,7 @@
 
 ## 10단계: 백업에서 자료실을 되살립니다 — 이전 단계 복구 절차 보존
 
-이 문서의 **10단계 복구 절차**는 현재 `main`에서 구현한 동작을 설명합니다. 복구 대상은 공식 서명으로 검증된 시험 계정 **B의 지정 메모 한 건**이며, 다른 메모·강사 공지·기존 정책·감사 이력을 초기화하지 않습니다. 운영 자료실 주소는 `https://choi-bujang-secret-vault-blush.vercel.app/`, 복원 경로는 **`POST /api/restore`**입니다. 10단계 당시 설정은 `step=10`이었고, 현재 `aleph.config.json`은 `step=11`입니다. `restoreRoute="/api/restore"`, `allowedRoutes`의 `POST /api/restore`와 배포 `/aleph.json`에도 같은 경로가 기록됩니다.
+이 문서의 **10단계 복구 절차**는 현재 `main`에서 구현한 동작을 설명합니다. 복구 대상은 공식 서명으로 검증된 시험 계정 **B의 지정 메모 한 건**이며, 다른 메모·강사 공지·기존 정책·감사 이력을 초기화하지 않습니다. 운영 자료실 주소는 `https://choi-bujang-secret-vault-blush.vercel.app/`, 복원 경로는 **`POST /api/restore`**입니다. 10단계 당시 설정은 `step=10`이었고, 현재 `aleph.config.json`은 `step=12`입니다. `restoreRoute="/api/restore"`, `allowedRoutes`의 `POST /api/restore`와 배포 `/aleph.json`에도 같은 경로가 기록됩니다.
 
 ### 백업 검증
 
@@ -164,6 +164,6 @@ npm run bundle
 - **8단계:** 메모와 강사 공지 자원 구역 분리. 일반 사용자 공지 작성·수정 거부.
 - **9단계:** 가명 주체의 10분 내 과다 조회 탐지 및 `propose_revocation` 제안 기능 유지.
 
-**소스/배포 확인:** GitHub 저장소 `https://github.com/yeaun12/choi-bujang-secret-vault`, 운영 자료실 `https://choi-bujang-secret-vault-blush.vercel.app/`. 제출 직전에는 `git log -1 --oneline`으로 현재 커밋을 확인하고 `npm run bundle`로 해당 커밋의 `artifacts/submission.json`을 생성합니다. 현재 `aleph.config.json.step=11`, `restoreRoute="/api/restore"`입니다.
+**소스/배포 확인:** GitHub 저장소 `https://github.com/yeaun12/choi-bujang-secret-vault`, 운영 자료실 `https://choi-bujang-secret-vault-blush.vercel.app/`. 제출 직전에는 `git log -1 --oneline`으로 현재 커밋을 확인하고 `npm run bundle`로 해당 커밋의 `artifacts/submission.json`을 생성합니다. 현재 `aleph.config.json.step=12`, `restoreRoute="/api/restore"`입니다.
 
 **문서 보충:** 이 README 자체에 10단계의 복구 조건·검증 방법·재시험 결과·미실행 항목을 모두 기술했습니다. 보조 구현 문서 `docs/STAGE10_LIVE_PROOF_CONTRACT.md`를 읽지 않아도 위 절차를 판단할 수 있습니다. **수정 이전 방식(과거 기록)**에 있던 프로세스 내부 직접 GET 호출 방식은 현재 사용하지 않으며 실제 HTTPS 요청으로 재시험합니다. 1~9단계의 세부 개발 이력은 저장소의 이전 Git 커밋에 남아 있습니다.
