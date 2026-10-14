@@ -13,3 +13,5 @@ xdr/web-injection/deny-rules.json.*.tmp
 .stage10-sandbox/
 xdr/persistence/deny-rules.json
 xdr/persistence/deny-rules.json.*.tmp
+xdr/privilege/deny-rules.json
+xdr/privilege/deny-rules.json.*.tmp

@@ -1,0 +1,38 @@
+name: XDR-05 bonus checkpoint
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'xdr/privilege/**'
+      - 'xdr/README.md'
+      - 'README.md'
+      - 'scripts/xdr-run-privilege.mjs'
+      - 'test/xdr-privilege-bonus.test.mjs'
+      - 'package.json'
+      - '.github/workflows/xdr-privilege-bonus-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run xdr:test
+      - run: npm run test:stage12
+      - run: npm run decider:test
+      - run: npm run detect:test
+      - run: npm run build -- --local
+      - run: npm run xdr:privilege:read
+      - run: npm run xdr:run -- privilege
+      - name: Validate official-shaped 9/8/9 replay
+        run: node -e "const r=require('./xdr/privilege/result.json'); if(r.schema!=='aleph.xdr.result.v1'||r.moduleKey!=='privilege'||r.decisions.length!==26||r.counts.block!==9||r.counts.alert!==8||r.counts.record!==9)process.exit(1);console.log(r.counts)"
+      - run: npm run xdr:privilege:replay
