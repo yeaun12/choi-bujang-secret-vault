@@ -21,14 +21,17 @@
 ### 검증과 제출 전 확인
 
 - 합성 암호학 단위 시험: 유효 등록키의 메서드·경로·본문에 대한 서명 검증, **서명 없는 요청·서명 후 경로 변경·본문 변조·서명 재사용 거부**, 이전 단계 회귀 검사.
-- 실제 브라우저 수동 확인: (1) 로그인만 했을 때 자료 비노출, (2) 인증기로 등록 성공 이후 서명한 보호 요청에서만 기존 화면 정상, (3) 새로고침·오프라인·서명 취소 시 보호 자료 비노출. **실제 인증기 사용자 승인/실제 브라우저 수동 시험은 별도 실행 전까지 미실행입니다.**
-- 로컬 재현: `npm ci`, `npm run test:stage11`, `npm run decider:test`, `npm run build -- --local`, `npm run bundle`. `aleph.config.json.step=11`; 공식 제출 판정은 별도입니다.
+- **실제 브라우저 확인(2026-10-14, 사용자 직접 수행·결과 보고):** (1) 최신 11단계 화면 표시, (2) 로그인 후 기기 승인 전 개인 자료 비노출, (3) WebAuthn 기기 등록 및 서명 요청 후 기존 메모 화면 정상 표시. 이 결과는 사용자 확인에 근거하며 자동화된 브라우저 시험 로그가 아닙니다.
+- **별도 미확인:** 새로고침·오프라인·서명 취소 시 모든 화면 상태 및 심판의 실제 서명 없는 요청/경로·본문 변조 공격 결과는 독립적으로 확인하지 않았습니다. 이 항목은 통과로 기록하지 않습니다.
+- **로컬 재현:** `npm install`, `npm run test:stage11`, `npm run decider:test`, `npm run build -- --local`, `npm run bundle`. 사용자 CMD 확인: `npm install` 성공(취약점 0), `npm run test:stage11` 81/81 통과. `npm run bundle`은 **11단계 저장점 커밋을 PC에 가져온 뒤 새로 실행**해야 합니다.
+- **11단계 저장점:** `aleph.config.json.step=11` 유지. 운영 URL `https://choi-bujang-secret-vault-blush.vercel.app/`; 11단계 Production 커밋 `48f94a46c5932c036f76d794cc4c72cb67e5e5ac` 배포 `READY` 확인. 이 문서만 갱신한 저장점 커밋은 배포 반영 및 `npm run bundle` 재실행으로 별도 확인합니다. `judgeIssuer`, 로그인 발급자, 원본 API 주소, 허용 경로, `RULE_IDS`의 기능은 변경하지 않습니다.
+- **제출 평가:** PWA 화면·기기 등록/서명 API 구현과 브라우저 사용자 확인은 완료됐으나, **11단계 공식 심판 채점 결과는 아직 없습니다.**
 
 ---
 
-## 10단계: 백업에서 자료실을 되살립니다 — 현재 구현과 복구 절차
+## 10단계: 백업에서 자료실을 되살립니다 — 이전 단계 복구 절차 보존
 
-이 문서의 **10단계 복구 절차**는 현재 `main`에서 구현한 동작을 설명합니다. 복구 대상은 공식 서명으로 검증된 시험 계정 **B의 지정 메모 한 건**이며, 다른 메모·강사 공지·기존 정책·감사 이력을 초기화하지 않습니다. 운영 자료실 주소는 `https://choi-bujang-secret-vault-blush.vercel.app/`, 복원 경로는 **`POST /api/restore`**입니다. `aleph.config.json`의 `step=10`, `restoreRoute="/api/restore"`, `allowedRoutes`의 `POST /api/restore`와 배포 `/aleph.json`에도 같은 경로가 기록됩니다.
+이 문서의 **10단계 복구 절차**는 현재 `main`에서 구현한 동작을 설명합니다. 복구 대상은 공식 서명으로 검증된 시험 계정 **B의 지정 메모 한 건**이며, 다른 메모·강사 공지·기존 정책·감사 이력을 초기화하지 않습니다. 운영 자료실 주소는 `https://choi-bujang-secret-vault-blush.vercel.app/`, 복원 경로는 **`POST /api/restore`**입니다. 10단계 당시 설정은 `step=10`이었고, 현재 `aleph.config.json`은 `step=11`입니다. `restoreRoute="/api/restore"`, `allowedRoutes`의 `POST /api/restore`와 배포 `/aleph.json`에도 같은 경로가 기록됩니다.
 
 ### 백업 검증
 
@@ -112,6 +115,6 @@ npm run bundle
 - **8단계:** 메모와 강사 공지 자원 구역 분리. 일반 사용자 공지 작성·수정 거부.
 - **9단계:** 가명 주체의 10분 내 과다 조회 탐지 및 `propose_revocation` 제안 기능 유지.
 
-**소스/배포 확인:** GitHub 저장소 `https://github.com/yeaun12/choi-bujang-secret-vault`, 운영 자료실 `https://choi-bujang-secret-vault-blush.vercel.app/`. 제출 직전에는 `git log -1 --oneline`으로 현재 커밋을 확인하고 `npm run bundle`로 해당 커밋의 `artifacts/submission.json`을 생성합니다. `aleph.config.json.step=10`, `restoreRoute="/api/restore"`입니다.
+**소스/배포 확인:** GitHub 저장소 `https://github.com/yeaun12/choi-bujang-secret-vault`, 운영 자료실 `https://choi-bujang-secret-vault-blush.vercel.app/`. 제출 직전에는 `git log -1 --oneline`으로 현재 커밋을 확인하고 `npm run bundle`로 해당 커밋의 `artifacts/submission.json`을 생성합니다. 현재 `aleph.config.json.step=11`, `restoreRoute="/api/restore"`입니다.
 
 **문서 보충:** 이 README 자체에 10단계의 복구 조건·검증 방법·재시험 결과·미실행 항목을 모두 기술했습니다. 보조 구현 문서 `docs/STAGE10_LIVE_PROOF_CONTRACT.md`를 읽지 않아도 위 절차를 판단할 수 있습니다. **수정 이전 방식(과거 기록)**에 있던 프로세스 내부 직접 GET 호출 방식은 현재 사용하지 않으며 실제 HTTPS 요청으로 재시험합니다. 1~9단계의 세부 개발 이력은 저장소의 이전 Git 커밋에 남아 있습니다.
