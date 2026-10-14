@@ -57,3 +57,37 @@ test('untrusted deployment names never expand the accepted judge audience', asyn
     assert.equal(await verifier('Bearer ' + jwt), null);
   }
 });
+
+test('officially signed non-v4 UUIDs and JWT audience arrays retain bounded identity', async () => {
+  const { privateKey, publicKey } = await generateKeyPair('ES256');
+  const verifier = createLoginVerifier({
+    config, deploymentHost: deployment,
+    judgeKeySet: async () => publicKey,
+    supabaseClient: { auth: { getClaims: async () => ({ data: null, error: null }) } },
+  });
+  // UUID version is not an authorization role. The issuer's valid signature,
+  // strict trusted audiences and signed B identity are the security boundary.
+  const v1UserId = '123e4567-e89b-12d3-a456-426614174001';
+  const v5RunId = '123e4567-e89b-52d3-a456-426614174002';
+  const now = Math.floor(Date.now() / 1000);
+  const signed = (aud, options = {}) => new SignJWT({
+    aleph_role: options.role ?? 'judge', aleph_identity: options.actor ?? 'b',
+    aleph_run: v5RunId,
+  }).setProtectedHeader({ alg: 'ES256' })
+    .setIssuer(options.issuer ?? issuer).setAudience(aud).setSubject(v1UserId)
+    .setIssuedAt(options.issuedAt ?? now - 3600)
+    .setExpirationTime(options.expiresAt ?? now + 600).sign(privateKey);
+  const verified = await verifier('Bearer ' + await signed([fixed, deployment]));
+  assert.deepEqual(verified, {
+    kind: 'judge', userId: v1UserId, runId: v5RunId, identity: 'b',
+  });
+  const { noteScopeOwnerId } = await import('../src/resource-api-auth.mjs');
+  assert.match(noteScopeOwnerId(verified), /^[0-9a-f-]{36}$/u);
+  for (const invalid of [
+    signed(['malicious.vercel.app']),
+    signed([fixed], { issuer: 'https://different-issuer.example.org/defense/judge' }),
+    signed([fixed], { role: 'student' }),
+    signed([fixed], { expiresAt: now - 20 }),
+    signed([fixed], { issuedAt: now + 60 }),
+  ]) assert.equal(await verifier('Bearer ' + await invalid), null);
+});
