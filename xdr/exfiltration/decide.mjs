@@ -1,5 +1,38 @@
 // XDR-06: classify one synthetic data-exfiltration alert at a time.
 // Import-free, stateless, offline. "block" is a decision, not a live firewall action.
+const PATTERN_DEFINITIONS = Object.freeze([
+  {
+    "name": "unexpected_bulk_data_transfer",
+    "technique": "T1048/T1041",
+    "condition": "T1041/T1048 tag, confirmed high-volume outbound transfer to a new external IP plus many files, or evidence of an entire vault copied externally.",
+    "rationale": "High-volume outbound transfer to an unfamiliar destination with many files, or confirmed copy of whole vault to an external address."
+  },
+  {
+    "name": "correlated_repeated_large_transfer",
+    "technique": "T1041/T1048",
+    "condition": "T1041/T1048 tag, large verified outbound volume and per-alert correlated repeat count, with unusual hours or clear repeated bulk transfers.",
+    "rationale": "Large outbound volume and verified repeated transfers, or repetition outside usual hours."
+  },
+  {
+    "name": "unusual_outbound_transfer_channel",
+    "technique": "T1041/T1048",
+    "condition": "T1041/T1048 tag, unusual outbound port with many repeated file transfers, or command channel and new destination with confirmed repeat count.",
+    "rationale": "Large transfers using an unusual port and repeated many-file activity, or command channel transfer with novel destination and repeated count."
+  },
+  {
+    "name": "suspicious_archive_outbound_transfer",
+    "technique": "T1048",
+    "condition": "T1048 tag, large archive transfer to unfamiliar external IP, corroborated by off-hours timing, repetition or multiple destinations.",
+    "rationale": "Large archive/bundled-data transfer to a novel destination with further corroboration from out-of-hours, repeated, or multi-destination activity."
+  },
+  {
+    "name": "exfiltration_context_needs_review",
+    "technique": "T1041/T1048",
+    "condition": "T1041/T1048 tag with an isolated or incomplete outbound signal; do not block without confirmed volume and abnormal context.",
+    "rationale": "Incomplete, isolated or lower-severity outbound activity; do not enforce a block."
+  }
+]);
+
 const PATTERNS = Object.freeze({
   mass: 'unexpected_bulk_data_transfer',
   repeated: 'correlated_repeated_large_transfer',

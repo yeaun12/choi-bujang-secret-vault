@@ -69,3 +69,13 @@ node scripts/xdr-run.mjs brute-force
 - `enforceZtnaDecision(baseDecision, trustedIdentity)`는 신뢰된 인증 계정 매핑과 출발지 IP가 함께 제공될 때만, 기존 ZTNA 허용 결정을 공식 응답 5개 필드 안에서 거부 결정으로 변경하는 **별도 시험 어댑터**입니다. Wazuh의 `srcuser`를 SDP `subjectId`와 동일하다고 추정하지 않습니다.
 - **제약:** 실제 SDP 릴레이에 연결하지 않았고, 인증 토큰·세션 발급자에 대한 회수 API도 호출하지 않습니다. 따라서 로컬의 세션 거부 후보 9건은 실제 세션 회수 9건을 의미하지 않습니다. 공식 심판 판정도 별도입니다.
 - `npm run xdr:test`: 기존 XDR 6모듈과 보너스 회귀 시험을 모두 실행합니다.
+
+## XDR-06 보너스 저장점: Exfiltration
+
+- `npm run xdr:exfiltration:read`: 수업용 Wazuh 경보 30건에서 시각·출발 주소·계정·규칙 수준·설명 다섯 필드만 읽습니다. `decide.mjs`와 분리되어 비밀값 원문을 출력하지 않습니다.
+- `xdr/exfiltration/patterns.json`: MITRE T1041/T1048에 근거한 비정상 외부 전송, 반복 대량 전송, 비표준 통로, 압축 파일 반출과 불충분 증거의 조건 및 근거 한 줄. 필요한 패턴 상수는 `decide.mjs` 안에 포함합니다.
+- `npm run xdr:run -- exfiltration`: 심판과 같은 오프라인 인터페이스로 `xdr/exfiltration/result.json`을 다시 생성합니다. 합성 30건의 예상 판정은 block 10 / alert 10 / record 10입니다. `result.json` 파일 자체는 심판의 독립 재실행을 대체하지 않습니다.
+- `npm run xdr:exfiltration:replay`: `respond.mjs`가 검증된 공격 목적지만 15분간 로컬 거부 후보로 기록하고, 경보 ID·만료 시각을 남깁니다. 출발 계정/주소도 함께 대조해 정상 사용자의 다른 통신은 유지합니다. `xdr/alerts.log`와 거부 후보 JSON은 Git에서 제외합니다.
+- `enforceZtnaDecision(baseDecision, trustedFlow)`: 기존 ZTNA가 낸 5필드 결과를 받아 인증된 소스·계정·목적지 매핑이 전부 일치할 때만 거부로 바꾸는 **별도 로컬 어댑터**입니다. 기존 `src/decider.mjs`는 그대로 유지됩니다.
+- **한계:** 현재 SDP 판정 계약은 요청의 목적지 IP를 받지 않습니다. 따라서 운영 릴레이에 연결되거나 실제 목적지 방화벽 차단이 집행됐다고 주장하지 않습니다. 공식 심판의 XDR 코드 판정과 로컬 차단 후보 검증은 구분합니다.
+- `npm run xdr:test`: XDR 전 모듈 및 보너스 모듈 로컬 회귀 시험입니다.
