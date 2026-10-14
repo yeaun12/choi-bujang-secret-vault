@@ -1,0 +1,22 @@
+name: Stage 10 external reachability probe
+
+on:
+  push:
+    branches:
+      - stage10-diagnose-external-access-oct14
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Inspect real public alias, deployment URL and judge public key endpoint
+        run: node scripts/stage10-external-probe.mjs
