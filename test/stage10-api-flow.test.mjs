@@ -502,6 +502,10 @@ test('retest audit write failure preserves truthful restored result without fabr
   assert.equal(outcome.status, 503, 'Unverified post-restore audit cannot return success');
   assert.equal(outcome.body.restored, true, 'Restoration already committed: must not say false');
   assert.equal(outcome.body.retestVerified, false, 'Missing audit evidence cannot be a passed retest');
+  assert.equal(outcome.body.error, 'retest_evidence_unavailable');
+  assert.equal(outcome.body.retest?.evidenceUnavailable, true);
+  assert.equal(outcome.body.retest?.executed, null, 'Unpersisted outcomes cannot be counted as zero');
+  assert.deepEqual(outcome.body.retests, [], 'Never invent unverified HTTP status evidence');
   assert.equal(outcome.body.match?.all, true, 'Restored record must still be provably original');
   assert.equal(outcome.body.backup?.contentSha256, backup.content_sha256);
   assert.equal(outcome.body.id, backup.note_id);
