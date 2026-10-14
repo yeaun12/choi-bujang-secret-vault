@@ -13,7 +13,8 @@
     "xdr:run": "node scripts/xdr-run.mjs",
     "xdr:test": "node --test test/xdr-read-alerts.test.mjs test/xdr-decide.test.mjs test/xdr-respond.test.mjs test/xdr-run.test.mjs test/xdr-course-fixture.test.mjs test/xdr-web-injection.test.mjs",
     "test:stage11": "node --experimental-test-module-mocks --test test/r5.test.mjs test/stage10-*.test.mjs test/stage11-*.test.mjs",
-    "test:stage12-war-room": "node --test test/stage12-war-room.test.mjs"
+    "test:stage12-war-room": "node --test test/stage12-war-room.test.mjs",
+    "test:stage12-matrix": "node --test test/stage12-check-matrix.test.mjs"
   },
   "engines": {
     "node": ">=22"

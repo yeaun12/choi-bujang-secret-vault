@@ -40,7 +40,8 @@ export async function GET(request) {
     const result = await collectWarRoomEvidence(database);
     // Log and response use the SAME result. No private DB record goes to logs.
     console.info(JSON.stringify(redactWarRoomLog(result)));
-    return json(result);
+    return Response.json(result, {status:200,headers:{
+      'Cache-Control':'no-store','X-Request-Id':result.requestId }});
   } catch {
     return json({ error: 'Operational evidence unavailable.' }, 503);
   }
