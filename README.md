@@ -1,13 +1,62 @@
 # BYTE BACK 방어전 시작 틀 R5
 
-## 현재 10단계 검증 안내
+## 10단계: 백업에서 자료실을 되살립니다 — 현재 구현과 복구 절차
 
-**현재 실행 계약(우선 기준):** [Stage 10 실제 복구 증거 계약](docs/STAGE10_LIVE_PROOF_CONTRACT.md). 요청·응답·백업 일치·재시험에 필요한 실제 필드와 상태 코드를 한곳에 정리했습니다. [10단계 검증 기록](docs/STAGE10_VERIFICATION.md)과 아래의 날짜별 단락은 과거 개발·시험 이력이며 최신 API 계약이 아닙니다. 공식 심판 B의 실제 복구 성공은 아직 확인되지 않았습니다.
+이 문서의 **10단계 복구 절차**는 현재 `main`에서 구현한 동작을 설명합니다. 복구 대상은 공식 서명으로 검증된 시험 계정 **B의 지정 메모 한 건**이며, 다른 메모·강사 공지·기존 정책·감사 이력을 초기화하지 않습니다. 운영 자료실 주소는 `https://choi-bujang-secret-vault-blush.vercel.app/`, 복원 경로는 **`POST /api/restore`**입니다. `aleph.config.json`의 `step=10`, `restoreRoute="/api/restore"`, `allowedRoutes`의 `POST /api/restore`와 배포 `/aleph.json`에도 같은 경로가 기록됩니다.
 
-실제 DB에서는 `test/stage10-db-rollback.sql`로 합성 B 메모의 백업 재조회·변조/삭제 복원·ID/소유자/해시·감사 보존을 검증하고 전체 롤백했습니다. 제출 자기 점검은 `src/stage10-self-check.mjs`를 새로 실행해 정책 검증과 로컬 API 복구 시험을 기존 배포 익명 점검과 함께 기록합니다. 과거 결과를 새 실행 결과로 채우지 않습니다. 재현 명령은 `npm run test:stage10`입니다.
+### 백업 검증
 
-한 건 복원 자기 점검의 `expected`와 `observed`에는 이번 로컬 실행에서 실제로 읽은 사본/복원 행의 ID·저장 소유자·SHA-256을 각각 기록합니다. 복원 행뿐 아니라 API 응답도 같은 세 값인지 확인하고, 측정 증거가 없거나 다르면 실패로 남깁니다. 자세한 범위는 위 검증 기록을 따릅니다.
+**안전 정책 사본(제작 1~2).** 공식 통과한 8단계 및 9단계 커밋의 `src/decider.mjs` Git blob이 같은 안전 버전(`3d8715d5aa11a548c72e7188028f7c2539af8ef8`)인지 검증한 뒤, 읽기 전용 비교로 현재 시험 정책과 다른 줄·영역을 확인합니다. 사본이 없거나 Git blob이 불일치하면 작업을 중단합니다. `node scripts/stage10-policy-diff.mjs`는 차이만 출력하고 운영 정책을 변경하지 않습니다. 시험 정책을 복원할 때는 `.stage10-sandbox/`의 **격리된 시험 파일**만 대상으로, 버전과 변경 범위 및 현재 파일 SHA-256을 미리 보여 줍니다. `node scripts/stage10-policy-restore.mjs --preview` 후 확인된 해시를 사용해 `--apply <미리보기_현재_SHA256> --confirm TEST_ONLY`로 승인해야 복원합니다. 복원 직전 원본 사본과 시험 파일을 재검증하고, 복원 뒤 정상 A 요청은 `allow`, B의 A 자료 요청은 `deny`, 미등록 기기는 `deny`, 이상 접속은 `step_up`인지 검사합니다. 이 과정에서 **운영 `src/decider.mjs`·다른 서비스 정책·운영 DB는 수정하지 않습니다.**
 
+**비공개 메모 사본(제작 3).** 시험 B가 `POST /api/notes`로 새 메모를 생성하면 DB의 원자적 작업으로 원본 메모·비공개 사본(`stage10_note_backups`)·`backup_created` 감사 근거를 함께 기록합니다. 기존 B 메모는 **처음으로 인증된 PUT/DELETE가 실행되기 직전** 현재 행을 사본으로 기록합니다. 사본은 검증된 심판 실행 ID, B 신원, 메모 ID 및 저장 소유자에 귀속하며, 저장 후 별도 조회로 **ID·소유자·내용 SHA-256·사본 시각**을 대조합니다. 최초 `backup_created` 감사 근거의 해시도 별도로 검증합니다. 기존 사본은 나중의 변경 내용으로 덮어쓰지 않습니다.
+
+**복원 전 재확인.** B의 메모 복구 요청을 받으면 사본을 다시 읽고 실제 본문의 SHA-256, 소유자, 메모 ID, 버전(`captured_at`), 원본 생성 감사 기록과 일치하는지 검사합니다. 미리보기에서는 현재 메모와 비교해 **변경될 항목(`changes`)과 사본 버전(`version`)**을 먼저 반환합니다. 쓰기 직전에 사본과 최초 감사 해시를 한 번 더 확인합니다. 사본 누락은 **404**, 무결성·출처·소유자 불일치는 **409** 등으로 복원을 중단하고, 검증되지 않은 데이터를 안전 사본으로 간주하지 않습니다. 특히 이미 변조되었거나 삭제된 메모를 복구 요청 시점에 새로 백업해 원본으로 둔갑시키지 않습니다.
+
+### 한 건 복원
+
+- **경로와 권한:** `POST /api/restore`에 심판 발급자의 ES256 서명·발급자·허용 대상·만료·신원 정보를 확인한 **시험 B**만 접근합니다. 익명은 401, 시험 A나 일반 학생은 403으로 거부합니다. `GET /api/restore`는 405입니다. 요청에 포함된 임의의 역할·소유자 주장을 신뢰하지 않습니다.
+- **대상 지정 및 실행 전 확인:** 요청 본문은 `{"noteId":"<메모_UUID>"}` 한 건입니다(`id`, `note_id`, `memoId` 별칭 지원). `{"noteId":"<메모_UUID>","dryRun":true}`는 쓰기 없이 사본의 `version`, 변경될 `changes`, 소유자 및 해시 근거를 반환합니다. 요청에 `ownerId` 또는 `contentSha256`를 명시했다면 확인된 사본과 일치해야 실행합니다. 메모 ID를 생략한 요청은 해당 심판 실행의 **검증된 B 사본 중 현재와 다른 대상이 정확히 한 건**일 때만 허용하고, 아니면 400으로 거부합니다.
+- **실제 복원:** 검증된 사본의 메모 **한 건만** 원본 제목·내용·생성 시각으로 수정하거나 삭제된 경우 같은 ID·소유자로 재생성합니다. 작업 후 DB에서 행을 재조회해 사본과 **ID(`id`), 저장 소유자(`ownerId`), 내용 SHA-256(`contentSha256`)**이 모두 일치하는지 재검증합니다. `backup.noteId`, `backup.ownerId`, `backup.contentSha256`과 복원 응답 및 DB 재조회 결과를 대조해 `match.all`을 산출합니다. 다른 메모를 일괄 복원하거나 기존 메모·공지·서비스 정책을 초기화하지 않습니다.
+
+### 감사 기록 보존
+
+`stage10_note_backups`의 검증된 원본 사본과 `stage10_restore_audit`의 기존 기록을 보존합니다. 복구 요청·거부·성공·재시험은 **추가 기록**으로 남기며 기존 감사 행을 삭제·수정하지 않습니다. 감사에는 실행 범위, 메모 ID, 이유 코드·본문 해시 등 필요한 검증 메타데이터만 기록하고 **메모 본문·토큰·비밀키는 기록하지 않습니다.** 응답의 `scope`에는 복원 대상이 한 건이고 다른 메모를 변경하지 않았다는 범위가 명시됩니다.
+
+복구 자체가 DB에서 검증된 후 마지막 완료 감사 저장이 실패하면 **HTTP 503**, `restored:true`, `match.all:true`, `completionAuditVerified:false`, `retestVerified:false`로 보고합니다. 복구되지 않았다고 거짓 보고하지 않으며 후속 재시험을 성공으로 표시하지 않습니다. 복구 뒤 재시험 감사 저장에 실패해도 **HTTP 503**, `restored:true`, `retestVerified:false`, `retest.evidenceUnavailable:true`로 구분합니다. 기록을 확인할 수 없는 시험 건수는 임의 숫자가 아니라 `null`로 남깁니다.
+
+### 복원 뒤 재시험
+
+복구된 메모의 ID·소유자·본문 해시가 원본 사본과 일치한 뒤에만, 기존 API를 통한 **실제 HTTP 정상·금지 요청**을 실행합니다. 재시험 결과는 `retest`와 `postRestoreRetest`의 정상(`normal`)·금지(`forbidden`) 결과 및 `retests`의 개별 HTTP 상태로 기록합니다. 네트워크 실패·예상 외 응답을 통과로 처리하지 않고, 필요한 재시험이 실패하면 복구 여부와 별개로 **HTTP 503 / `retestVerified:false`**를 반환합니다.
+
+**복구 직후 자동 HTTP 재시험:**
+
+1. B의 복구된 자기 메모 `GET /api/notes/:id` → **200**, 응답 ID·본문 SHA-256은 백업과 일치.
+2. 같은 메모 비인증 GET → **401**, 자료 비노출.
+3. B가 `?owner_id=...`를 붙여 조회 → **400**, 쿼리 우회 거부.
+4. 존재하지 않는 메모를 B가 GET → **404**.
+5. 검증 가능한 시험 A 소유 메모가 있을 때 B가 해당 메모 GET → **404**. A 사본이 없어 실제 실행할 수 없다면 `retest.notRun=["foreign_denied"]`과 `not_run_no_verified_a_note`로 **미실행** 표시하고, 통과한 것으로 위장하지 않습니다.
+
+**1~9단계 전체 재검증 순서(검증 절차):** 복구가 끝난 뒤 아래 순서로 정상 요청과 금지 요청을 다시 확인합니다. 위 5가지 자동 HTTP 재시험만으로 1~9단계 전체가 재시험됐다고 주장하지 않습니다.
+
+1. **1~2단계 공개 자료 차단:** 비인증 `GET /data.json` → 404, 정적 메모 재노출 없음.
+2. **3단계 로그인:** 비인증·잘못된 토큰의 메모 조회/생성 → 401; 유효한 로그인 사용자는 본인 메모 사용 가능.
+3. **4~5단계 소유권·서버 API:** A 정상 자기 메모 GET은 200; B의 A 메모 GET·PUT·DELETE는 404; 직접 Supabase REST 자료 요청은 차단.
+4. **6단계 기기 검사:** 등록 기기 정상 요청 `allow`, 미등록 기기 요청 `deny/device_not_registered`.
+5. **7단계 추가 인증:** 정상 가상 사건은 `allow`, 복합 위험 신호는 `step_up`.
+6. **8단계 자원 구역:** 강사 공지 정상 조회 유지, 일반 학생의 공지 작성·수정과 전체 목록 우회는 거부.
+7. **9단계 이상 조회 탐지:** 동일 가명 주체의 10분 내 조회량 120건과 121건 경계에서 `observe`/`propose_revocation` 분기 확인.
+
+**실행 상태의 구분:** `npm run test:stage10`은 로컬 합성 B 메모와 시험 저장소를 사용한 회귀 검증이고, `npm run bundle`은 공개 배포에 대한 비인증 HTTP 자기 점검과 로컬 검증을 각각 표시합니다. **공식 심판 B의 실제 백업 생성→변조/삭제→운영 복구→1~9단계 전체 공격 재시험은 별도 증거가 확보되지 않아 미실행/미확인입니다.** 실행하지 않은 시험은 `notRun` 또는 **미실행**으로 그대로 남겨 두며, 로컬 통과를 운영 복원·심판 통과라고 쓰지 않습니다.
+
+**재현 명령(로컬):**
+
+```cmd
+node scripts/stage10-policy-diff.mjs
+npm run test:stage10
+npm run bundle
+```
+
+---
 이 저장소는 1단계에서 학생 본인이 GitHub 저장소와 Vercel 배포를 만드는 출발점입니다. 포함된 메모 네 건은 가상 자료입니다. 실제 학생 자료, 토큰, 비밀키를 넣지 마세요.
 
 ## 학생이 하는 일: 세 걸음
@@ -410,128 +459,3 @@ git status --short
 제작 1~3의 로컬 탐지 테스트 11/11, `detect:test` 6/6, 기존 회귀 테스트 12/12는 저장점 직전 사용자 CMD에서 확인했습니다. 이번 설정·빌드 지원 변경 이후의 재검증은 별도로 필요합니다.
 
 `bundle-notes.json`은 Git에서 제외되는 로컬 파일이며 최소 `explanation` 10자 이상이 필요합니다. 커밋 반영 후 `npm run bundle`은 실측된 비인증 HTTP 결과와 커밋 정보를 `artifacts/submission.json`에 기록합니다. 두 JSON은 Git에 커밋하지 않습니다.
-
-
-## 10단계 제작 3: 시험 계정 B의 비공개 메모 사본 및 복구 경로
-
-- 서비스: 기존 메모 자료실 Vercel 서버리스 API. 복구 경로: **`POST /api/restore`** (`aleph.config.json.restoreRoute = "/api/restore"`). JSON 본문은 `{"noteId":"<복구할 한 건의 UUID>"}`이며 `id` 별칭도 허용합니다.
-- 인증: 서버가 `createLoginVerifier`로 검증한 공식 심판의 B 가상 신원(`kind=judge`, `identity=b`, 서명 검증된 run ID)만 허용합니다. 일반 학생·심판 A·익명 사용자는 복원할 수 없습니다. 토큰·메모 본문은 로그·GitHub·제출 묶음에 기록하지 않습니다.
-- 백업 확보: 공식 심판 B의 `POST /api/notes`는 원자적 DB 함수에서 새 메모·비공개 사본·최초 백업 감사 기록을 함께 생성합니다. 최초 생성 경로 밖에서 이미 존재한 B 메모는 **첫 인증된 PUT/DELETE 직전** 원본을 저장하되, 그 시점이 침해 이전이라는 사실은 별도로 보장할 수 없습니다. 백업 기본키 `(judge_run_id, note_id)`로 덮어쓰기를 차단합니다. 사고 이후 `GET` 또는 복구 요청으로 사본을 새로 만들지 않습니다.
-- 복구: B의 POST 복구 요청 → 같은 실행·ID·소유자의 사본을 다시 읽어 내용 SHA-256 확인 → **별도 저장된 최초 `backup_created` 감사 기록을 다시 읽고 원본 SHA-256과 대조** → 변경 범위 미리보기 → 복원 직전 사본·최초 감사 해시 재검증 → 해당 한 건만 복구 → ID·소유자·제목·본문 해시 재검증 및 감사 기록. 사본 누락, 서로 다른 해시, 감사 원본 증거 누락·중복, 소유자 충돌이면 메모를 수정하지 않습니다.
-- 기존 메모·강사 공지·다른 서비스·감사 기록은 초기화/전체 복원하지 않습니다. `stage10_restore_audit`는 메모 내용 없이 사건 종류와 이유·해시만 추가합니다.
-
-**검증 경계:** 새 공식 B 메모는 DB 트랜잭션으로 원본 사본과 감사 기록을 함께 저장합니다. 10단계 이전부터 존재하거나 공식 심판이 API 외부에서 만든 메모는 초기 시점의 사본이 반드시 확보된다고 보장할 수 없습니다. 별도 생성 감사 기록과의 대조는 백업 본문·해시의 동시 변조를 탐지하지만, 동일 DB의 감사 기록까지 조작할 수 있는 공격자에 대한 암호학적 증명이나 오프사이트 백업은 아닙니다. 현재 조치는 실제 심판 변조 실패 `S10_BACKUP_UNVERIFIED`의 직접 원인임이 입증되지 않았으며, 공식 재판정이 필요합니다.
-
-```cmd
-node --test test/stage10-recovery.test.mjs
-node --check api/restore.js
-node --check api/notes/index.js
-npm run decider:test
-npm run fixture:7
-npm run test:r5
-```
-
-로컬 테스트는 합성 가상 B 메모로만 수행합니다. 운영 B 토큰은 복사·출력하지 않습니다. 공식 B 메모의 실제 변조·삭제 후 복구, 1~9단계 전체 재평가와 심판 판정은 **미실행**입니다.
-
-
-## 10단계 제작 4: 복구 후 1~9단계 재검증 순서
-
-**실행 조건:** 실제 공식 시험 계정 B의 **침해 전 검증된 사본**에서 변조·삭제된 대상 **한 건만** 복원하고, ID·소유자·본문 SHA-256 일치를 확인합니다. 사전 사본 없거나 출처·해시 검증 실패 시 복원을 중단합니다. 아래 가상 테스트 결과는 운영 복구 뒤 실제 재시험으로 대체할 수 없습니다.
-
-1. **10단계 복원과 감사:** 같은 심판 실행(run)의 B 메모 최초 백업 존재 확인 → 변조/삭제 → `POST /api/restore`에 서명 검증된 B와 `noteId` 하나만 전달 → 백업과 동일한 `id`, `owner_id`, 본문 SHA-256 및 정상 메모 수·감사 이력 보존 확인. 사본 누락·다른 ID/소유자·해시 불일치·시험 A/익명/학생 신원은 거부.
-2. **1~2단계 정적 유출 방지:** 비인증 `GET /data.json`은 404이며 초기 공개 가상 자료가 다시 노출되지 않는지 확인.
-3. **3단계 인증:** 비인증 `GET /api/notes`, `POST /api/notes`, 잘못된 로그인 토큰 요청은 401/403으로 거부; 본인 로그인 후 본인 메모 목록은 유지.
-4. **4~5단계 소유권/서버 경로:** 정상 A의 자기 메모 `GET` 유지, B의 A 메모 `GET`/`PUT`/`DELETE`는 404. 역할·소유자 주장 또는 쿼리로 우회 불가. 다른 메모 원본 불변.
-5. **6단계 기기:** 등록 기기 가상 요청은 `allow`; 미등록 기기는 `deny/device_not_registered`.
-6. **7단계 추가 인증:** 정상 사건 `allow`; 낯선 네트워크·비정상 시간·최근 위험 사건이 모두 겹친 가상 요청 `step_up`; 후속 검증된 요청만 재허용.
-7. **8단계 자원 구역:** 학생 강사 공지 조회는 유지, 공지 작성·수정 거부. 판정기의 전체 목록 허용·기능 경로·역할 위조는 거부.
-8. **9단계 이상 조회:** 10분 내 단일 가명 사용자 GET 120건 `observe`, 121건 `propose_revocation/burst_read`; 다른 사용자·시간대 혼합 금지. 실제 세션 회수는 공식 엔진 평가.
-
-### 재검증 명령
-
-```cmd
-node --test test/stage10-policy-diff.test.mjs test/stage10-policy-restore.test.mjs test/stage10-recovery.test.mjs
-node --test test/resource-id.test.mjs test/resource-policy.test.mjs test/resource-api-auth.test.mjs test/instructor-notices.test.mjs
-node --test test/stage9-detect-input.test.mjs test/stage9-burst-rule.test.mjs test/stage9-proposal.test.mjs
-npm run detect:test
-npm run decider:test
-npm run fixture:7
-npm run test:r5
-npm run build -- --local
-git status --short
-```
-
-**이미 확인한 로컬 결과:** 사용자 CMD로 10단계 정책 복원 8/8, 가상 메모 복원 5/5, 자원 접근 통제 16/16, 판정기 4건, 탐지 6건, 7단계 allow/step_up, R5 회귀 14/14, 로컬 빌드 성공. 이 검증은 **실제 B 메모 복구 후 실행한 테스트가 아닙니다**.
-
-**미실행:** 공식 B 메모 백업 생성 → 실제 변조·삭제 → POST 복원 → 원본 해시·소유자 대조; 실제 A/B 세션의 정상/거부 요청 재검증; 공식 심판의 1~9단계 공격 재전송. 명시적으로 미실행으로 유지하고 결과를 추정하지 않습니다.
-
-**보존:** 기존 1~9단계 `decide(request)` 다섯 필드·`RULE_IDS` 세 개, `src/detect.mjs`, 메모·공지 DB, 기존 감사 기록. `judgeIssuer`와 서버 전용 비밀값을 변경하거나 공개하지 않습니다. 제출 묶음에는 비공개 메모 본문을 포함하지 않습니다.
-
-### 10단계 저장점 준비 및 실제 배포 설정
-
-- 9단계 공식 심판 통과는 사용자 제출 화면에서 2026-10-13 확인됐습니다. 10단계 변경은 이를 기반으로 한 별도 브랜치에서 개발했습니다.
-- `aleph.config.json.step`을 **10**으로 변경하고 `restoreRoute`를 `/api/restore`로 지정했습니다. `allowedRoutes`에는 `POST /api/restore` 한 개를 추가했으며, 기존 로그인/메모/강사 공지 경로는 그대로입니다.
-- 배포 식별, 빌드, 자기 점검의 허용 단계를 10까지 확장했습니다. `judgeIssuer`, `identityProvider`, `originalApiUrl`, `publicAppUrl`, 실제 `src/decider.mjs`의 기존 RULE_IDS와 `src/detect.mjs`는 변경하지 않았습니다.
-- `npm run bundle`에서 기록하는 공격 점검은 비인증 `/data.json`·메모·공지 API와 비인증 **POST `/api/restore`**의 실제 HTTP 응답 7건입니다. 이것만으로 심판 B 복구 성공을 증명하지 않습니다.
-- **저장점 미검증:** 실제 B 최초 백업 생성·변조·삭제·한 건 복원과 그 후 1~9단계 실시간 공격 재전송. 최종 배포와 로컬 재시험 후 수행 여부만 갱신해야 합니다. 실제 실행 없이 성공으로 기록하지 않습니다.
-
-
-### 10단계 사후 재시험 감사 기록 (추가 수정)
-
-- 실제 복구 POST가 성공하면 해당 배포의 `/api/notes/:id`로 정상 조회, 비인증 조회 거부, 쿼리 우회 거부를 HTTP로 재시험합니다. 시험 A의 메모가 검증 가능한 경우 B의 A 메모 접근 거부도 확인합니다.
-- HTTP 결과(상태 코드와 성공·실패)를 기존 `stage10_restore_audit`의 허용된 `event_kind`(`restore_verified`/`restore_failed`/`restore_rejected`)에 **`retest_` 접두어가 붙은 `reason_code`**로 기록합니다. 자료 본문·토큰은 기록하지 않습니다. 검증 불가능한 A 자료 교차시험은 `retest_foreign_not_run_no_a_note`로 **미실행** 표시합니다.
-- 기존 DB `event_kind` 제약조건, RLS, 테이블 및 데이터는 변경하지 않습니다. 새 사건 종류 추가를 위한 SQL 마이그레이션은 필요하지 않으며 적용하지 않습니다.
-- 주의: 사후 재시험은 실제 시험 B의 복구가 성공해야 실행됩니다. 로컬 테스트에서 가짜 HTTP 응답을 사용한 경우 운영 HTTP 검증 완료로 취급하지 않습니다.
-
-### 10단계 심판 JWT 대상 주소 진단 및 보완
-
-- 기존 서버 인증은 `aleph.config.json.publicAppUrl`에 설정된 고정 도메인만 JWT의 `aud`로 받았지만, 실제 `/aleph.json`의 `publicAppUrl`은 Vercel 배포별 `VERCEL_URL`로 생성됩니다. 두 주소가 다를 때 유효한 심판 JWT가 API 진입 전에 거부될 수 있습니다.
-- JWT의 **서명(ES256), 등록된 judgeIssuer, 만료, run ID, A/B 구분, 서명된 sub** 검사는 유지합니다. 허용 대상은 기존 고정 도메인과, 사용자가 조작하는 Host 헤더가 아닌 **Vercel 플랫폼 환경변수 `VERCEL_URL`** 중 저장소 프로젝트 이름 규칙에 맞는 배포 호스트만입니다.
-- 진단 재현: `node --test test/stage10-judge-audience.test.mjs`. 정상 심판 B 토큰을 두 주소로 검증하고 타 프로젝트 주소는 거부합니다. 기존 1~9단계·10단계 정책/복구 회귀 및 로컬 빌드는 별도 CI에서도 검사했습니다.
-- **운영 한계:** 이전 공식 심판의 실패 원인은 심판 토큰·상태코드가 제공되지 않아 확정되지 않았습니다. 이 보완 전 실제 `stage10_note_backups`와 `stage10_restore_audit`가 모두 0건이었습니다. 재심판 후 기록·복구 ID/소유자/해시·사후 실제 HTTP 테스트를 확인해야 최종 통과로 표시합니다. 기존 데이터는 임의로 변경하지 않습니다.
-
-### 10단계 복구 경로 보강 (변조 후 복구 판정 대응)
-
-- `POST /api/restore` 본문: `{"noteId":"<UUID>"}` (별칭 `id`·`note_id`·`memoId`). 서로 다른 ID 두 개는 거부합니다. 미리보기는 `{"noteId":"…","dryRun":true}`이며 메모를 바꾸지 않고 **사본 버전(`version`)과 바뀔 항목(`changes`)**만 보여 줍니다. `contentSha256`·`ownerId`를 함께 보내면 사본과 다를 때 409로 멈춥니다. ID를 생략하면 이번 실행의 검증된 B 사본 가운데 **현재와 다른 메모가 정확히 한 건**일 때만 그 한 건을 대상으로 하고, 아니면 400입니다.
-- 실행 순서: 사본 두 번 다시 읽기·해시 검증(미리보기) → 소유자 확인 → 복원 직전 사본 재확인 → 한 건만 수정/재생성 → DB 행 재조회로 ID·소유자·본문 SHA-256 대조 → 감사 기록. 사본 없음(404)·검증 실패(409)이면 복원하지 않습니다.
-- 응답: `restored`, `id`, `ownerId`(**백업·DB와 동일한 저장 소유자**), `owner.subject`(서명된 B 주체), `owner.storageOwnerId`, `contentSha256`, `version`, `changes`, `backup{verified, rereadBeforeWrite, version, noteId, ownerId, contentSha256}`, `match{id, ownerId, contentSha256, all}`, `retest{passed, complete, normal[], forbidden[], notRun[]}`. `backup.ownerId`를 토큰 주체로 바꾸지 않습니다.
-- **수정 이전 방식(과거 기록):** 이 당시에는 `GET /api/notes/:id` 처리기를 같은 프로세스에서 직접 호출했습니다. **현재 배포 버전**은 고정된 운영 HTTPS 주소로 독립 HTTP GET 요청을 보내며, HTTP 상태·본문 해시를 검사합니다. 재시험 실패 시 복원 여부를 숨기지 않고 HTTP 503과 `retestVerified:false`를 반환합니다. [현재 계약](docs/STAGE10_LIVE_PROOF_CONTRACT.md)을 확인하세요.
-- Vercel 함수 로그에는 `stage10_restore` 단계·이유 코드·상태만 남깁니다(토큰·본문 없음).
-- 로컬 확인: `node --test test/stage10-restore-api.test.mjs test/stage10-recovery.test.mjs test/stage10-postrestore-retest.test.mjs` (합성 가상 B 메모). 실제 심판 B의 변조→복구는 **미실행**이며 재제출 판정으로만 확인합니다.
-
-### 10단계 저장점: 배포 식별 정보의 복구 경로 누락 수정
-
-- `2ee15c3` 재판정에서도 세 조건이 실패했습니다. 해당 커밋이 운영 배포에 반영된 것은 확인했지만, DB 백업과 복원 감사 기록은 각각 0건이었습니다. 심판 호출 로그는 접근 권한 오류로 확인하지 못해 호출 실패 원인은 아직 확정하지 않았습니다.
-- 확인된 결함: `scripts/deployment-identity.mjs`가 `aleph.config.json.restoreRoute`를 배포의 `public/aleph.json`에 전달하지 않았습니다. 10단계에만 `/api/restore`를 전달하고, 설정과 `POST /api/restore` 허용 경로가 맞지 않으면 빌드를 중단합니다. 앞 단계의 배포 정보와 DB 자료·정책은 변경하지 않습니다.
-- 검증: `node --test test/r5.test.mjs test/stage10-*.test.mjs`. 빌드 때 생성한 `public/aleph.json`의 `restoreRoute`가 `/api/restore`인지 확인합니다. 이 검증은 공식 B 토큰을 사용한 실제 복구 성공이나 심판 통과를 뜻하지 않습니다.
-- 재제출 주소: `https://choi-bujang-secret-vault-blush.vercel.app/`. 새 커밋 배포가 READY인 것을 확인한 뒤 제출합니다. 판정 뒤 DB 백업·감사 기록과 반환 상태를 다시 확인해야 합니다.
-
-### 10단계 저장점: API 통합 시험에서 재현된 결함 수정
-
-`3094ffb`도 같은 세 조건으로 실패했습니다. 아래 변경은 추정한 심판 응답 필드를 추가한 것이 아니라, 기존 API의 실제 불일치를 로컬 통합 시험으로 재현해 수정한 것입니다.
-
-| 재현한 결함 | 수정 뒤 동작 |
-|---|---|
-| 복구 응답의 소유자가 검증한 백업 소유자와 다름 | 응답 `ownerId`와 `backup.ownerId`는 실제 DB 소유자와 같음; 토큰 주체는 `owner.subject`로 별도 표시 |
-| A 메모가 없어 교차 접근 시험을 하지 못해도 전체 `passed=true` (과거 결함) | 당시에는 `notRun`을 남기고 `complete=false`, `passed=false`로 수정; 현재 구현에서는 A 자료가 없을 때 `notRun`은 유지하되 실제로 실행한 필수 HTTP 정상·금지 점검이 전부 통과하면 `complete=true`, `passed=true`가 될 수 있음 |
-| 본문 없는 POST에서 선택 항목이 undefined여서 409 거부 | 선택 항목을 null로 통일; 해당 실행의 변경된 B 메모가 정확히 한 건일 때만 복구 |
-
-**재현 명령:** `npm run test:stage10` (Node.js 22 이상). **실행 결과:** 54개 통과. 새 통합 시험은 수정 전 6개 중 4개가 실패했고 수정 뒤 6개 모두 통과했습니다.
-
-통합 시험(`test/stage10-api-flow.test.mjs`)은 임시 로컬 HTTP 서버에 기존 API 처리기를 연결합니다. 매 실행 생성한 ES256 키로 합성 A/B 토큰을 서명하고 기존 인증 검증기로 확인합니다. 시험 메모 생성 → 최초 사본 INSERT·재조회 → B 메모 변조/삭제 → 읽기 전용 미리보기 → 한 건 복원 → 저장된 ID·소유자·본문 해시와 응답 대조 → 정상 B 조회/익명 거부/쿼리 거부/B의 A 조회 거부를 수행합니다. 다른 메모·사본·기존 감사 이력도 대조합니다. 사본 누락·손상과 잘못된 소유자·해시·A/익명 복구 거부를 별도로 확인합니다.
-
-**시험 범위:** 인증 검증과 API 처리기는 실제 저장소 코드이며, DB와 심판 공개키 조회는 시험 대체 구현입니다. 공식 B 토큰·실제 운영 DB·Vercel 네트워크 경로를 검증한 결과가 아닙니다. 공식 재판정은 별도이며 미실행 항목을 성공으로 기록하지 않습니다. DB/정책 마이그레이션은 없습니다.
-
-### 10단계 재시험 누락 판정 보완 (2026-10-13)
-
-- 재시험의 필수 실행 항목은 복원 B 메모 정상 조회(HTTP 200, 본문 SHA-256 대조), 비인증 조회 거부(401), 검증된 B 세션의 쿼리 우회 거부(400)입니다. 실제 HTTP 핸들러를 호출한 뒤 각 상태와 결과를 감사 테이블에 기록합니다.
-- 심판 A의 메모 ID를 검증할 수 있는 경우 B→A 조회 거부(404)까지 실행하고 실패 시 재시험 실패로 처리합니다. A의 검증된 메모가 없는 경우에는 해당 선택적 교차 시험을 `not_run_no_verified_a_note`로 정확히 기록하며 실행된 것으로 속이지 않습니다. 다만 이 선택적 시험의 사전 데이터 부재로 실제 실행한 정상·금지 재시험 결과 전체를 실패 처리하지는 않습니다.
-- `retest.passed`는 필수 정상·금지 시험이 실제로 실행되고 모두 통과했으며, 실행한 선택적 교차 시험도 실패하지 않았을 때만 참입니다. `retest.notRun`과 `retests`에는 수행하지 못한 선택적 시험이 그대로 남습니다. 이 동작은 합성 데이터 로컬 테스트 기준이며 공식 심판의 재판정은 아직 확인하지 않았습니다.
-- 재현: `npm run test:stage10`, `npm run build -- --local`; 1~9단계 코드와 운영 DB 스키마·기존 메모를 변경하지 않습니다.
-
-### 10단계 현재 제출 증거 안내 (최신)
-
-- 과거 절의 '미실행'은 당시 점검 상태를 기록한 작업 이력이며, 최신 구현의 수행 여부를 뜻하지 않습니다.
-- 실제 시험 계정 B의 변조 후 복구 요청이 성공한 경우에만 `POST /api/restore` 응답에 `postRestoreRetest`가 생성됩니다. `normal` 및 `forbidden` 배열은 요청별 실제 HTTP 상태 코드와 판정을 제공하며, `executed`, `passed`, `failed`는 실행된 시험만 집계합니다.
-- 정상 B 메모 읽기·해시 일치, 비인증 조회 401, 잘못된 쿼리 400을 확인합니다. 검증된 A 메모가 존재하는 경우 교차 소유자 접근 404도 확인하며, 없으면 선택적 시험은 `notRun`에 따로 남깁니다. 미실행을 성공으로 채우지 않습니다.
-- 기존 `retest`·`retests` 필드는 이전 버전과의 호환성을 위해 유지합니다. 배포된 API의 실제 B 복원/재시험 성공과 공식 심판 판정은 별도로 검증해야 합니다.
