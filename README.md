@@ -1,4 +1,12 @@
 # BYTE BACK 방어전 시작 틀 R5
+
+## 보너스 xdr-06 저장점 (2026-10-14)
+
+- 「자료 빼돌리기를 잡아 냅니다」: `xdr/exfiltration/read-alerts.mjs`, `patterns.json`, 독립 `decide.mjs`, `respond.mjs`, `scripts/xdr-run-exfiltration.mjs`에 합성 경보 분석·로컬 차단 후보를 구현했습니다.
+- 기존 ZTNA 판정기 `src/decider.mjs`, 원본 `xdr/fixtures/exfiltration.json`, `aleph.config.json.step=12`, 인증 발급자·허용 경로·원본 API 주소는 변경하지 않았습니다.
+- 재현: `npm run xdr:exfiltration:read` → `npm run xdr:run -- exfiltration` → `npm run xdr:exfiltration:replay` → `npm run xdr:test` → `npm run test:stage12`. 예상 30건은 block 10 / alert 10 / record 10이며 정상 오차단 0건을 확인합니다.
+- 로컬 후처리는 출발 계정·주소·목적지별 15분 만료 차단 후보와 정제 로그까지만 담당합니다. **운영 SDP에는 목적지 필드가 없어 실제 차단 연동과 공식 심판 판정은 별도**입니다. 상세 내용은 `xdr/README.md`를 참고합니다.
+
 ## 보너스 xdr-05 저장점 (2026-10-14)
 
 - 「권한 가로채기를 잡아 냅니다」: `xdr/privilege/read-alerts.mjs`, `patterns.json`, 독립 `decide.mjs`, `respond.mjs`, `scripts/xdr-run-privilege.mjs`로 구성된 보너스 판정·로컬 후처리.
