@@ -1,0 +1,46 @@
+{
+  "schema": "aleph.xdr.privilege.patterns.v1",
+  "references": [
+    "https://attack.mitre.org/techniques/T1068/",
+    "https://attack.mitre.org/techniques/T1078/"
+  ],
+  "patterns": [
+    {
+      "name": "unexpected_administrator_group_change",
+      "technique": "T1078",
+      "decision": "block",
+      "evidence": "Confirmed administrator group change accompanied by an unusual source, ordinary-account promotion, rapid re-addition or correlated simultaneous privileged action."
+    },
+    {
+      "name": "recent_privilege_gain_and_command",
+      "technique": "T1068/T1078",
+      "decision": "block",
+      "evidence": "Administrator command executed immediately after gaining administrative privileges."
+    },
+    {
+      "name": "unusual_privileged_command",
+      "technique": "T1068",
+      "decision": "block",
+      "evidence": "Administrator command executed from an unfamiliar source, outside usual hours, or using another account's privileges."
+    },
+    {
+      "name": "unusual_privileged_session_change",
+      "technique": "T1068",
+      "decision": "block",
+      "evidence": "Confirmed unexpected session privilege elevation associated with an unfamiliar source."
+    },
+    {
+      "name": "privilege_context_needs_review",
+      "technique": "T1068/T1078",
+      "decision": "alert",
+      "evidence": "Privilege-related activity without enough corroboration for an automatic block."
+    }
+  ],
+  "guardrails": [
+    "A MITRE label, high rule level, administrator username or mere group query never authorizes blocking.",
+    "Cancelled/failed attempts, routine authorized administration and low-confidence changes are not blocked.",
+    "Block requires a valid source address, identified source account, high severity and correlated privilege change/command evidence.",
+    "Only fields of an individual alert are used; no cross-alert state, imports, I/O, networking or secret material.",
+    "Block is a classifier label for synthetic course fixtures, not proof of enforced access revocation."
+  ]
+}
