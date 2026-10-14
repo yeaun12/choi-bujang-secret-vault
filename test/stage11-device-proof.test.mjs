@@ -117,13 +117,14 @@ test('protected-path allowlist never includes arbitrary routes or query tamperin
   assert.equal(protectedPath('DELETE','/api/instructor-notices'),false);
 });
 
-test('stage 11 deployment preserves stage 10 restore and advertises device APIs', async()=>{
+test('stage 11 controls remain in deployments of stage 11 or later', async()=>{
   const config=JSON.parse(read('aleph.config.json'));
   const { deploymentIdentity }=await import('../scripts/deployment-identity.mjs');
   const out=deploymentIdentity({VERCEL_GIT_PROVIDER:'github',VERCEL_GIT_REPO_OWNER:'yeaun12',
     VERCEL_GIT_REPO_SLUG:'choi-bujang-secret-vault',
     VERCEL_GIT_COMMIT_SHA:'a'.repeat(40),VERCEL_URL:'choi-bujang-secret-vault-test-yeaun.vercel.app'},config);
-  assert.equal(out.step,11);
+  assert.equal(out.step,config.step);
+  assert.ok(out.step >= 11);
   assert.equal(out.restoreRoute,'/api/restore');
   for(const route of ['GET /api/device','POST /api/device',
     'POST /api/device/challenge','POST /api/restore'])assert.ok(out.allowedRoutes.includes(route));

@@ -210,6 +210,12 @@
       margin-top: 3px;
     }
 
+    .matrix-wrap { overflow-x: auto; margin: 14px 0; }
+    .matrix { border-collapse: collapse; min-width: 850px; width: 100%; font-size: 13px; }
+    .matrix th,.matrix td { padding: 10px; border-bottom: 1px solid #51667c;
+      text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    .matrix .ok { color: #8fe8c0; font-weight: 700; }
+    .matrix .fail { color: #ffb7c3; font-weight: 700; }
     [hidden] {
       display: none !important;
     }
@@ -218,7 +224,7 @@
 
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 11단계 설치형 안전 접속</div>
+    <div class="eyebrow">BYTE BACK · 12단계 탈환 작전실 · 안전 접속</div>
 
     <h1>개인 자료실</h1>
 
@@ -343,9 +349,36 @@
         <li>로그인 후 가상 자료를 확인할 수 있습니다.</li>
       </ul>
     </section>
+    <section id="war-room-panel" class="panel" aria-labelledby="war-room-title" hidden>
+      <h2 id="war-room-title">탈환 작전실 · 제작 1</h2>
+      <p>검증된 기기 서명으로만 조회합니다. 서버에서 확인된 숫자와 아직 실행하지 않은 검증을 분리해 표시합니다.</p>
+      <button type="button" class="secondary" id="war-room-refresh">실제 서버 요약 조회</button>
+      <p id="war-room-status" class="message" role="status">조회 전 · 확인된 결과 없음</p>
+      <ul id="war-room-results" aria-live="polite">
+        <li>판정기·탐지·회수·복구 상태를 확인하려면 서버 요약을 조회해 주세요.</li>
+      </ul>
+    </section>
+    <section id="matrix-panel" class="panel" hidden aria-labelledby="matrix-title">
+      <h2 id="matrix-title">탈환 작전실 · 제작 2 통합 검증표</h2>
+      <p>1~11단계 정상·금지 요청을 같은 표에서 구별합니다. 12단계 자체 점검도 포함합니다.
+      공식 41종 시험 목록이나 총공세 채점 결과가 아닙니다.</p>
+      <button class="secondary" type="button" id="matrix-run">안전한 조회만 실측</button>
+      <p id="matrix-status" class="message" role="status">미실행</p>
+      <div class="matrix-wrap"><table class="matrix">
+        <thead><tr><th>단계</th><th>정상/금지 요청</th><th>기대 결과</th>
+        <th>실제 HTTP 결과</th><th>요청 ID</th><th>확인 시각</th></tr></thead>
+        <tbody id="matrix-rows"></tbody>
+      </table></div>
+      <p>클라이언트 요청 ID는 브라우저가 만든 구분자이며 서버 로그 저장 증거는 아닙니다.
+         서버 요청 ID는 API 응답으로 확인된 경우에만 표시합니다.
+         HTTP 응답 본문·개인 정보·인증값은 표에 기록하지 않습니다.</p>
+      <p>타인 메모, 회수된 신원, 복구, 추가 인증 검증은 별도 권한·환경이 없어 미실행 상태로 유지합니다.
+         41종 공식 총공세는 심판의 별도 결과로 확인해야 합니다.</p>
+    </section>
   </main>
 
   <script type="module">
+    import {SCENARIOS,blankResults,recordResult,summarizeResults} from '/stage12-check-matrix.mjs';
     let currentSession = null;
     let refreshInFlight = null;
 
@@ -380,6 +413,8 @@
         ? '온라인: 보호 자료는 서버에서만 확인합니다.'
         : '오프라인: 보호 자료를 열 수 없습니다.';
       if (!navigator.onLine) {
+        clearWarRoom();
+        clearMatrix();
         createPanel.hidden = true;
         setDeviceApprovalMessage('기기 승인 상태: 오프라인 · 서버 검증 불가');
         showNotesMessage('오프라인에서는 개인 자료를 표시하지 않습니다.');
@@ -459,6 +494,157 @@
 
     const list =
       document.querySelector('#notes');
+    const warRoomPanel = document.querySelector('#war-room-panel');
+    const warRoomStatus = document.querySelector('#war-room-status');
+    const warRoomResults = document.querySelector('#war-room-results');
+    const warRoomRefresh = document.querySelector('#war-room-refresh');
+
+    function clearWarRoom() {
+      warRoomPanel.hidden = true;
+      warRoomStatus.textContent = '조회 전 · 확인된 결과 없음';
+      warRoomResults.replaceChildren();
+    }
+
+    function showWarRoomMetric(title, lines) {
+      const item = document.createElement('li');
+      const heading = document.createElement('strong');
+      heading.className = 'note-title';
+      heading.textContent = title;
+      item.append(heading);
+      for (const line of lines) {
+        const row = document.createElement('p');
+        row.className = 'note-body';
+        row.textContent = line;
+        item.append(row);
+      }
+      warRoomResults.append(item);
+    }
+
+    function displayWarRoom(report) {
+      if (report?.schema !== 'aleph.stage12.war_room.v1'
+          || !report?.requestId || !report?.observedAt
+          || !report?.policy || !report?.detection
+          || !report?.revocation || !report?.recovery) {
+        throw Error('작전실 응답 형식이 올바르지 않습니다.');
+      }
+      warRoomResults.replaceChildren();
+      warRoomStatus.textContent = '실제 API 조회 · 요청 ID ' + report.requestId
+        + ' · 확인 ' + new Date(report.observedAt).toLocaleString('ko-KR');
+      showWarRoomMetric('판정기 규칙', [
+        report.policy.status === 'configured_not_tested'
+          ? '설정 확인 · 실제 요청 판정 시험 아님' : '판정 결과 미확인',
+        '규칙 수: ' + (Number.isInteger(report.policy.ruleCount) ? report.policy.ruleCount : '미확인'),
+        '규칙: ' + (Array.isArray(report.policy.ruleIds)
+          ? report.policy.ruleIds.join(', ') : '미확인'),
+      ]);
+      showWarRoomMetric('탐지 사건', [
+        report.detection.status === 'not_executed'
+          ? '미실행 · 운영 탐지 사건 조회 근거 없음' : '확인되지 않은 응답',
+        '실측 사건 수: ' + (report.detection.eventCount ?? '미확인'),
+      ]);
+      showWarRoomMetric('회수 상태', [
+        report.revocation.status === 'not_executed'
+          ? '미실행 · 운영 회수 완료 근거 없음' : '확인되지 않은 응답',
+        '회수 완료 수: ' + (report.revocation.completedCount ?? '미확인'),
+      ]);
+      const recovery = report.recovery;
+      showWarRoomMetric('복구 사본·감사 기록', [
+        recovery.status === 'observed'
+          ? '서버 DB 조회 완료 · 감사 기록 존재 자체가 복구 성공은 아님'
+          : recovery.status === 'checked_empty'
+            ? '서버 DB 조회 완료 · 기록 없음' : '미확인 · 서버 근거 사용 불가',
+        '사본 수: ' + (recovery.backupCount ?? '미확인'),
+        '최신 사본 버전 시각: ' + (recovery.latestBackupVersion ?? '없음/미확인'),
+        '감사 기록 수: ' + (recovery.auditCount ?? '미확인'),
+        '마지막 감사 분류: ' + (recovery.latestAuditKind ?? '없음/미확인'),
+      ]);
+    }
+
+    warRoomRefresh.addEventListener('click', async () => {
+      warRoomRefresh.disabled = true;
+      clearWarRoom();
+      warRoomPanel.hidden = false;
+      warRoomStatus.textContent = '서버에서 확인 중 · 기기 서명이 필요합니다.';
+      try {
+        const report = await apiRequest('/api/war-room');
+        displayWarRoom(report);
+      } catch (error) {
+        warRoomResults.replaceChildren();
+        warRoomStatus.textContent = '조회 실패 · 검증된 수치를 표시하지 않습니다: ' + error.message;
+      } finally {
+        warRoomRefresh.disabled = false;
+      }
+    });
+
+    const matrixPanel=document.querySelector('#matrix-panel');
+    const matrixRun=document.querySelector('#matrix-run');
+    const matrixStatus=document.querySelector('#matrix-status');
+    const matrixRows=document.querySelector('#matrix-rows');
+    let currentMatrix=blankResults();
+
+    function renderMatrix() {
+      const s=summarizeResults(currentMatrix);
+      matrixStatus.textContent='학생 자체 HTTP 조회: '+s.measured+'/'+s.total+
+       ' 실측, 기대 일치 '+s.matched+', 불일치 '+s.mismatched+
+       ' · 공식 41종 총공세 미확인';
+      matrixRows.replaceChildren(...currentMatrix.map(x=>{
+        const tr=document.createElement('tr');
+        const cells=[String(x.stage),(x.direction==='normal'?'정상':'금지')+' '+x.label+
+          ' ('+x.request+')',String(x.expected),
+          x.result==='not_executed'?'미실행':x.result==='request_error'
+            ?'HTTP 미확인 · 실행 오류':'실측 '+x.actual+
+              ' · '+(x.result==='matched'?'기대 일치':'불일치'),
+          x.requestId?(x.requestIdSource==='server'?'서버 ':'클라이언트 ')+x.requestId:'미실행',
+          x.observedAt?new Date(x.observedAt).toLocaleString('ko-KR'):'미실행'];
+        for(let i=0;i<cells.length;i++){
+          const td=document.createElement('td');td.textContent=cells[i];
+          if(i===3&&x.result==='matched')td.className='ok';
+          if(i===3&&['mismatch','request_error'].includes(x.result))td.className='fail';
+          tr.append(td);
+        }
+        return tr;
+      }));
+    }
+    function clearMatrix() {
+      currentMatrix=blankResults();
+      matrixPanel.hidden=true;
+      renderMatrix();
+    }
+    async function runVerificationMatrix() {
+      const session=await getSession();
+      if(!session?.accessToken)throw Error('로그인 필요');
+      currentMatrix=blankResults();
+      renderMatrix();
+      for(const item of SCENARIOS.filter(x=>x.automation)) {
+        const path=item.request.slice(4);
+        const clientId=crypto.randomUUID();
+        let status=null, serverId=null;
+        try{
+          const headers=new Headers({'X-Request-Id':clientId});
+          if(['signed','unsigned'].includes(item.automation))
+            headers.set('Authorization','Bearer '+session.accessToken);
+          if(item.automation==='signed'){
+            const proof=await signProtectedRequest(session,'GET',path,'');
+            for(const [k,v] of Object.entries(proof))headers.set(k,v);
+          }
+          const response=await fetch(path,{method:'GET',cache:'no-store',redirect:'error',headers});
+          status=response.status;
+          const id=response.headers.get('X-Request-Id');
+          if(id&&/^[a-f0-9-]{36}$/i.test(id))serverId=id;
+        }catch{ /* no HTTP status means request_error, never success */ }
+        currentMatrix=recordResult(currentMatrix,{id:item.id,status,
+          requestId:serverId||clientId,requestIdSource:serverId?'server':'client',
+          observedAt:new Date().toISOString()});
+        renderMatrix();
+      }
+    }
+    matrixRun.addEventListener('click',async()=>{
+      matrixRun.disabled=true;
+      try{await runVerificationMatrix();}
+      catch{matrixStatus.textContent='검증 시작 실패 · 로그인과 기기 승인을 확인해 주세요.';}
+      finally{matrixRun.disabled=false;}
+    });
+    renderMatrix();
 
     function showAuthError(message) {
       authError.textContent = message || '';
@@ -476,6 +662,8 @@
     }
 
     function showLoggedOut() {
+      clearWarRoom();
+      clearMatrix();
       setDeviceApprovalMessage('기기 승인 상태: 로그인 전 · 서버 확인 필요');
       approveDeviceButton.hidden = true;
       openVaultButton.hidden = true;
@@ -492,6 +680,8 @@
     }
 
     function showLoggedIn() {
+      clearWarRoom();
+      clearMatrix();
       setDeviceApprovalMessage('기기 승인 상태: 서버 검증 전 (설치 여부와 무관)');
       approveDeviceButton.hidden = true;
       openVaultButton.hidden = true;
@@ -848,8 +1038,12 @@
 
         renderNotes(notes);
         createPanel.hidden = false;
+        warRoomPanel.hidden = false;
+        matrixPanel.hidden = false;
         setDeviceApprovalMessage('기기 승인 상태: 등록된 인증기 서명 · 서버 검증 완료');
       } catch (error) {
+        clearWarRoom();
+        clearMatrix();
         createPanel.hidden = true;
         showNotesMessage('자료를 열 수 없습니다: ' + error.message);
         setDeviceApprovalMessage('기기 승인 상태: 서명 또는 서버 검증 실패');

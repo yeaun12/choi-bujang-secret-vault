@@ -22,9 +22,9 @@ async function hasJsonError(response) {
 }
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(config.step)) {
     throw new Error(
-      'src/attack-check.mjs currently supports stages 1 through 11.'
+      'src/attack-check.mjs currently supports stages 1 through 12.'
     );
   }
 
@@ -232,7 +232,7 @@ export async function runAttackChecks(config) {
   // Stage 9 local detection proposals are separately tested with detect:test.
   // Cross-owner and instructor write checks were performed manually and are not
   // re-enacted with credentials by the submission bundle.
-  if (config.step === 8 || config.step === 9 || config.step === 10 || config.step === 11) {
+  if ([8, 9, 10, 11, 12].includes(config.step)) {
     const noticeGet = await fetch(new URL('/api/instructor-notices', app), {
       redirect: 'error',
       signal: AbortSignal.timeout(10000),
@@ -266,7 +266,7 @@ export async function runAttackChecks(config) {
     );
   }
 
-  if (config.step === 10 || config.step === 11) {
+  if ([10, 11, 12].includes(config.step)) {
     // Stage 10: attempt an actual anonymous recovery POST, with no valid token,
     // note UUID or body contents. It must be rejected *before* JSON parsing.
     const restoreResponse = await fetch(new URL('/api/restore', app), {
@@ -288,6 +288,21 @@ export async function runAttackChecks(config) {
     // deployed anonymous checks. Their labels disclose test storage/JWKS.
     const { runStage10SelfChecks } = await import('./stage10-self-check.mjs');
     checks.push(...await runStage10SelfChecks());
+  }
+
+  if (config.step === 12) {
+    // Run an actual anonymous GET; do not claim the official 41-case assault.
+    const room = await fetch(new URL('/api/war-room', app), {
+      redirect: 'error', signal: AbortSignal.timeout(10000),
+    });
+    const denied = room.status === 401 && await hasJsonError(room);
+    checks.push({
+      attackId: 'anonymous_war_room_read_denied',
+      expected: 'Anonymous war-room summary request is refused with JSON HTTP 401.',
+      observed: denied
+        ? `Anonymous war-room GET denied with JSON (HTTP ${room.status}).`
+        : `Anonymous war-room denial not verified (HTTP ${room.status}).`,
+    });
   }
 
   return checks;
