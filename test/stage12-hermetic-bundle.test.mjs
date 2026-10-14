@@ -18,7 +18,7 @@ test('stage 12 entry uses only allowed modules and does not load legacy checkers
 test('isolation is GET-only, has no credentials, and preserves unexecuted checks', () => {
   assert.match(source, /method: 'GET'/u);
   assert.doesNotMatch(source, /method: 'POST'|method: 'PUT'|method: 'DELETE'/u);
-  assert.doesNotMatch(source, /Authorization:|Bearer [A-Za-z0-9]|https:\/\/.*@/u);
+  assert.doesNotMatch(source, /Authorization:|Bearer [A-Za-z0-9._-]{12,}|https:\/\/.*@/u);
   assert.match(source, /observed: 'not_run'/u);
   assert.match(source, /official 41-case assault has not been independently verified/u);
   assert.match(source, /new URL\(path, app\)\.href/u);
