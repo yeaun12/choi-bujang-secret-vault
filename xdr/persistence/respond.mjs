@@ -127,8 +127,9 @@ export async function enforceZtnaDecision(baseDecision, trustedSourceIp, options
   return {
     ...baseDecision,
     decision: 'deny',
-    reasonCode: 'xdr04_persistence_quarantine',
-    ruleIds: [...new Set([...(Array.isArray(value.ruleIds) ? value.ruleIds : []),
-      'xdr04_persistence_quarantine'])],
+    // The SDP contract allows only registered reason codes/rule IDs.
+    // Preserve that contract: detailed XDR evidence stays in local deny state.
+    reasonCode: 'resource_access_denied',
+    ruleIds: ['resource_scope'],
   };
 }
