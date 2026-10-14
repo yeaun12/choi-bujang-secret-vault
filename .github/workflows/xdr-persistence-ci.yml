@@ -1,0 +1,27 @@
+name: XDR-04 persistence offline checks
+on:
+  pull_request:
+    branches: [xdr03-known-cve-20261014, main]
+    paths:
+      - 'xdr/persistence/**'
+      - 'test/xdr-persistence.test.mjs'
+      - 'package.json'
+      - '.github/workflows/xdr-persistence-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run xdr:test
+      - run: npm run xdr:run -- persistence
+      - name: Validate fixture replay counts
+        run: node -e "const r=require('./xdr/persistence/result.json'); if(r.schema!=='aleph.xdr.result.v1'||r.decisions.length!==24||r.counts.block!==8||r.counts.alert!==8||r.counts.record!==8)process.exit(1)"

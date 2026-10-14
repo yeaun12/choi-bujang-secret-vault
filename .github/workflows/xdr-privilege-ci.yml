@@ -1,0 +1,27 @@
+name: XDR-05 privilege offline checks
+on:
+  pull_request:
+    branches: [xdr04-persistence-20261014, main]
+    paths:
+      - 'xdr/privilege/**'
+      - 'test/xdr-privilege.test.mjs'
+      - 'package.json'
+      - '.github/workflows/xdr-privilege-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run xdr:test
+      - run: npm run xdr:run -- privilege
+      - name: Validate offline replay counts
+        run: node -e "const r=require('./xdr/privilege/result.json'); if(r.schema!=='aleph.xdr.result.v1'||r.decisions.length!==26||r.counts.block!==9||r.counts.alert!==8||r.counts.record!==9)process.exit(1)"

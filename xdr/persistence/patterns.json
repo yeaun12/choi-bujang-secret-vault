@@ -1,0 +1,34 @@
+{
+  "schema": "aleph.xdr.persistence.patterns.v1",
+  "references": [
+    "https://attack.mitre.org/techniques/T1053/",
+    "https://attack.mitre.org/techniques/T1543/"
+  ],
+  "patterns": [
+    {
+      "name": "suspicious_autostart_registration",
+      "technique": "T1543",
+      "decision": "block",
+      "condition": "High severity, source, persistence action, explicit suspicious indicator, and temporary executable/startup folder or correlated unsigned service registrations."
+    },
+    {
+      "name": "suspicious_scheduled_task",
+      "technique": "T1053",
+      "decision": "block",
+      "condition": "High-severity suspicious newly configured task with source and temporary executable."
+    },
+    {
+      "name": "persistence_context_needs_review",
+      "technique": "T1053/T1543",
+      "decision": "alert",
+      "condition": "Medium-severity persistence observation without enough corroboration to block."
+    }
+  ],
+  "guardrails": [
+    "Do not block merely for the MITRE label, an executable path, or a high Wazuh rule level.",
+    "Treat routine updates, signed services, read-only observations and incomplete telemetry conservatively.",
+    "Use event-specific data.count only; rule.firedtimes is not evidence of repeated changes.",
+    "A block decision does not terminate a real service, process, or scheduled task.",
+    "The fixture is synthetic course data, not a production endpoint policy."
+  ]
+}
