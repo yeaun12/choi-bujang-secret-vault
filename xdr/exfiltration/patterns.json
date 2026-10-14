@@ -1,0 +1,46 @@
+{
+  "schema": "aleph.xdr.exfiltration.patterns.v1",
+  "references": [
+    "https://attack.mitre.org/techniques/T1041/",
+    "https://attack.mitre.org/techniques/T1048/"
+  ],
+  "patterns": [
+    {
+      "name": "unexpected_bulk_data_transfer",
+      "technique": "T1048/T1041",
+      "action": "block",
+      "evidence": "High-volume outbound transfer to an unfamiliar destination with many files, or confirmed copy of whole vault to an external address."
+    },
+    {
+      "name": "correlated_repeated_large_transfer",
+      "technique": "T1041/T1048",
+      "action": "block",
+      "evidence": "Large outbound volume and verified repeated transfers, or repetition outside usual hours."
+    },
+    {
+      "name": "unusual_outbound_transfer_channel",
+      "technique": "T1041/T1048",
+      "action": "block",
+      "evidence": "Large transfers using an unusual port and repeated many-file activity, or command channel transfer with novel destination and repeated count."
+    },
+    {
+      "name": "suspicious_archive_outbound_transfer",
+      "technique": "T1048",
+      "action": "block",
+      "evidence": "Large archive/bundled-data transfer to a novel destination with further corroboration from out-of-hours, repeated, or multi-destination activity."
+    },
+    {
+      "name": "exfiltration_context_needs_review",
+      "technique": "T1041/T1048",
+      "action": "alert",
+      "evidence": "Incomplete, isolated or lower-severity outbound activity; do not enforce a block."
+    }
+  ],
+  "guardrails": [
+    "Do not block on bytes, MITRE tags, severe rule level or suspicious wording alone.",
+    "Require a source IP, destination IP, identified account, validated high outbound bytes and independent anomaly evidence.",
+    "Missing destination, incomplete transfer, failed transfer or normal approved backup must not block.",
+    "A Wazuh rule.firedtimes counter is not a correlated transfer count; use explicit per-alert data.count.",
+    "No networking, file access, secret values, active traffic interception or live blocking."
+  ]
+}
