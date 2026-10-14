@@ -35,7 +35,7 @@ test('read-only git show yields first-parent changed file names for a merge', ()
     git('switch', '-q', 'feature');
     writeFileSync(join(dir, 'feature.txt'), 'feature');
     git('add', '.'); git('commit', '-qm', 'feature');
-    git('switch', '-q', main);
+    git('switch', '--detach', '-q', main);
     git('merge', '--no-ff', '-qm', 'merge feature', 'feature');
     assert.deepEqual(git('show', '--first-parent', '--format=', '--name-only', 'HEAD')
       .split(/\r?\n/u).filter(Boolean).sort(), ['feature.txt']);
