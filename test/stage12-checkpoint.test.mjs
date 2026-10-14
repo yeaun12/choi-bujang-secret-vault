@@ -26,7 +26,7 @@ test('build and self-check explicitly support 12 and retain recovery checks',()=
  assert.match(c,/\b12\]\.includes\(config\.step\)/);
  assert.match(c,/anonymous_war_room_read_denied/);
  assert.match(c,/room\.status === 401 && await hasJsonError\(room\)/);
- assert.match(c,/src\/stage10-self-check\.mjs/);
+ assert.match(c,/\.\/stage10-self-check\.mjs/);
 });
 test('no invented 41-case results or actual revocation claims',()=>{
  assert.match(read('public/stage12-check-matrix.mjs'),/official41:'unverified'/);
