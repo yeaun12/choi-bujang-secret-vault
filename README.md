@@ -1,4 +1,11 @@
 # BYTE BACK 방어전 시작 틀 R5
+## 보너스 xdr-05 저장점 (2026-10-14)
+
+- 「권한 가로채기를 잡아 냅니다」: `xdr/privilege/read-alerts.mjs`, `patterns.json`, 독립 `decide.mjs`, `respond.mjs`, `scripts/xdr-run-privilege.mjs`로 구성된 보너스 판정·로컬 후처리.
+- 기존 `src/decider.mjs` 규칙, `aleph.config.json.step=12`, 로그인 발급자·허용 경로·원본 API 설정 및 `xdr/fixtures/privilege.json`은 변경하지 않음.
+- 재현: `npm run xdr:privilege:read`, `npm run xdr:run -- privilege`, `npm run xdr:privilege:replay`, `npm run xdr:test`, `npm run test:stage12`. 기준 분류는 합성 경보 26건 중 block 9 / alert 8 / record 9.
+- 계정+출발지별 15분 로컬 거부 후보와 안전한 알림만 구현. **운영 SDP 연계·실제 세션 토큰 회수·공식 심판 통과는 별도 확인 항목**. `xdr/README.md`에 구체적인 범위를 설명함.
+
 
 ## 12단계: 탈환 작전실을 완성합니다 — 저장점 구현 및 재현 절차
 
