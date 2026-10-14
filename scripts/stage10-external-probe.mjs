@@ -45,7 +45,7 @@ let alternate = null;
 try {
   const u = new URL(descriptor?.publicAppUrl);
   if (u.protocol === 'https:' && !u.username && !u.password && !u.search && !u.hash
-    && u.pathname === '/' && /^choi-bujang-secret-vault-[a-z0-9-]+\\.vercel\\.app$/u.test(u.hostname)
+    && u.pathname === '/' && /^choi-bujang-secret-vault-[a-z0-9-]+\.vercel\.app$/u.test(u.hostname)
     && u.origin !== primary) alternate = u.origin;
   else if (u.origin !== primary) errors.push('untrusted or malformed published deployment URL');
 } catch { errors.push('missing or malformed deployment publicAppUrl'); }
