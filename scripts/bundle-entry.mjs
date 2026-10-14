@@ -2,9 +2,11 @@
 // Create a truthful, non-secret default only when it is absent, and then run
 // the unchanged bundle generator in the same Node process.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
-const config = JSON.parse(readFileSync(new URL('../aleph.config.json', import.meta.url), 'utf8'));
-const notesPath = new URL('../bundle-notes.json', import.meta.url);
+const root = resolve(import.meta.dirname, '..');
+const config = JSON.parse(readFileSync(join(root, 'aleph.config.json'), 'utf8'));
+const notesPath = join(root, 'bundle-notes.json');
 try {
   readFileSync(notesPath, 'utf8');
 } catch (error) {
