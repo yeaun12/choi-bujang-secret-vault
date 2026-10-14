@@ -421,8 +421,6 @@
     const loginForm =
       document.querySelector('#login-form');
 
-    updateNetworkStatus();
-
     const emailInput =
       document.querySelector('#email');
 
@@ -1090,6 +1088,7 @@
       }
     );
 
+    updateNetworkStatus();
     await syncAuthState();
   </script>
 </body>
