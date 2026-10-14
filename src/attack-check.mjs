@@ -22,9 +22,9 @@ async function hasJsonError(response) {
 }
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) {
     throw new Error(
-      'src/attack-check.mjs currently supports stages 1 through 10.'
+      'src/attack-check.mjs currently supports stages 1 through 11.'
     );
   }
 
@@ -232,7 +232,7 @@ export async function runAttackChecks(config) {
   // Stage 9 local detection proposals are separately tested with detect:test.
   // Cross-owner and instructor write checks were performed manually and are not
   // re-enacted with credentials by the submission bundle.
-  if (config.step === 8 || config.step === 9 || config.step === 10) {
+  if (config.step === 8 || config.step === 9 || config.step === 10 || config.step === 11) {
     const noticeGet = await fetch(new URL('/api/instructor-notices', app), {
       redirect: 'error',
       signal: AbortSignal.timeout(10000),
@@ -266,7 +266,7 @@ export async function runAttackChecks(config) {
     );
   }
 
-  if (config.step === 10) {
+  if (config.step === 10 || config.step === 11) {
     // Stage 10: attempt an actual anonymous recovery POST, with no valid token,
     // note UUID or body contents. It must be rejected *before* JSON parsing.
     const restoreResponse = await fetch(new URL('/api/restore', app), {
