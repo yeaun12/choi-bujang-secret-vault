@@ -2,7 +2,7 @@
 
 ## 현재 10단계 검증 안내
 
-현재 구현과 시험 범위는 [10단계 검증 기록](docs/STAGE10_VERIFICATION.md)을 기준으로 확인합니다. 이 문서에는 과거 단계 기록도 남아 있으므로, 이전의 「미실행」 문장을 새로운 시험 결과와 혼동하지 않습니다. 공식 심판 B의 운영 복구는 별도 미실행입니다.
+**현재 실행 계약(우선 기준):** [Stage 10 실제 복구 증거 계약](docs/STAGE10_LIVE_PROOF_CONTRACT.md). 요청·응답·백업 일치·재시험에 필요한 실제 필드와 상태 코드를 한곳에 정리했습니다. [10단계 검증 기록](docs/STAGE10_VERIFICATION.md)과 아래의 날짜별 단락은 과거 개발·시험 이력이며 최신 API 계약이 아닙니다. 공식 심판 B의 실제 복구 성공은 아직 확인되지 않았습니다.
 
 실제 DB에서는 `test/stage10-db-rollback.sql`로 합성 B 메모의 백업 재조회·변조/삭제 복원·ID/소유자/해시·감사 보존을 검증하고 전체 롤백했습니다. 제출 자기 점검은 `src/stage10-self-check.mjs`를 새로 실행해 정책 검증과 로컬 API 복구 시험을 기존 배포 익명 점검과 함께 기록합니다. 과거 결과를 새 실행 결과로 채우지 않습니다. 재현 명령은 `npm run test:stage10`입니다.
 
@@ -495,7 +495,7 @@ git status --short
 - `POST /api/restore` 본문: `{"noteId":"<UUID>"}` (별칭 `id`·`note_id`·`memoId`). 서로 다른 ID 두 개는 거부합니다. 미리보기는 `{"noteId":"…","dryRun":true}`이며 메모를 바꾸지 않고 **사본 버전(`version`)과 바뀔 항목(`changes`)**만 보여 줍니다. `contentSha256`·`ownerId`를 함께 보내면 사본과 다를 때 409로 멈춥니다. ID를 생략하면 이번 실행의 검증된 B 사본 가운데 **현재와 다른 메모가 정확히 한 건**일 때만 그 한 건을 대상으로 하고, 아니면 400입니다.
 - 실행 순서: 사본 두 번 다시 읽기·해시 검증(미리보기) → 소유자 확인 → 복원 직전 사본 재확인 → 한 건만 수정/재생성 → DB 행 재조회로 ID·소유자·본문 SHA-256 대조 → 감사 기록. 사본 없음(404)·검증 실패(409)이면 복원하지 않습니다.
 - 응답: `restored`, `id`, `ownerId`(**백업·DB와 동일한 저장 소유자**), `owner.subject`(서명된 B 주체), `owner.storageOwnerId`, `contentSha256`, `version`, `changes`, `backup{verified, rereadBeforeWrite, version, noteId, ownerId, contentSha256}`, `match{id, ownerId, contentSha256, all}`, `retest{passed, complete, normal[], forbidden[], notRun[]}`. `backup.ownerId`를 토큰 주체로 바꾸지 않습니다.
-- 복구 뒤 재시험은 배포된 `GET /api/notes/:id` 처리기를 같은 함수 안에서 실제로 호출합니다(정상 B 읽기 200·해시 일치, 비로그인 401, 쿼리 우회 400, B의 A 메모 404). A 메모가 없으면 `notRun`에 남기고 결과를 지어내지 않습니다. 재시험이 실패해도 복원 사실은 숨기지 않고 `retest.passed=false`로 보고합니다.
+- **수정 이전 방식(과거 기록):** 이 당시에는 `GET /api/notes/:id` 처리기를 같은 프로세스에서 직접 호출했습니다. **현재 배포 버전**은 고정된 운영 HTTPS 주소로 독립 HTTP GET 요청을 보내며, HTTP 상태·본문 해시를 검사합니다. 재시험 실패 시 복원 여부를 숨기지 않고 HTTP 503과 `retestVerified:false`를 반환합니다. [현재 계약](docs/STAGE10_LIVE_PROOF_CONTRACT.md)을 확인하세요.
 - Vercel 함수 로그에는 `stage10_restore` 단계·이유 코드·상태만 남깁니다(토큰·본문 없음).
 - 로컬 확인: `node --test test/stage10-restore-api.test.mjs test/stage10-recovery.test.mjs test/stage10-postrestore-retest.test.mjs` (합성 가상 B 메모). 실제 심판 B의 변조→복구는 **미실행**이며 재제출 판정으로만 확인합니다.
 
@@ -513,7 +513,7 @@ git status --short
 | 재현한 결함 | 수정 뒤 동작 |
 |---|---|
 | 복구 응답의 소유자가 검증한 백업 소유자와 다름 | 응답 `ownerId`와 `backup.ownerId`는 실제 DB 소유자와 같음; 토큰 주체는 `owner.subject`로 별도 표시 |
-| A 메모가 없어 교차 접근 시험을 하지 못해도 전체 `passed=true` | `notRun`을 남기고 `complete=false`, `passed=false`; 복구 성공 사실과 시험 완료 여부를 구분 |
+| A 메모가 없어 교차 접근 시험을 하지 못해도 전체 `passed=true` (과거 결함) | 당시에는 `notRun`을 남기고 `complete=false`, `passed=false`로 수정; 현재 구현에서는 A 자료가 없을 때 `notRun`은 유지하되 실제로 실행한 필수 HTTP 정상·금지 점검이 전부 통과하면 `complete=true`, `passed=true`가 될 수 있음 |
 | 본문 없는 POST에서 선택 항목이 undefined여서 409 거부 | 선택 항목을 null로 통일; 해당 실행의 변경된 B 메모가 정확히 한 건일 때만 복구 |
 
 **재현 명령:** `npm run test:stage10` (Node.js 22 이상). **실행 결과:** 54개 통과. 새 통합 시험은 수정 전 6개 중 4개가 실패했고 수정 뒤 6개 모두 통과했습니다.
