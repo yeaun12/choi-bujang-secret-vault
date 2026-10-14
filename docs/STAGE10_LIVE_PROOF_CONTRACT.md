@@ -12,6 +12,13 @@ README.md and docs/STAGE10_VERIFICATION.md are not live judge evidence.
   checked-in `aleph.config.json.publicAppUrl` is the fixed production alias.
 - Restore: `POST /api/restore`, verified ES256 official **judge B** bearer
   token. A, student and anonymous clients cannot restore.
+- Official judge tokens are verified against the exact issuer, operator JWKS
+  signature (ES256), trusted fixed/deployment audience, expiry and signed
+  judge A/B role. The signed subject/run UUIDs may use standard RFC 4122
+  versions 1–5; signed JWT `aud` may be a string or array as the standard allows.
+  A token with a valid signed expiry is not rejected solely for being older
+  than a locally chosen 15-minute window. Untrusted issuers/roles/audiences,
+  expired tokens and future-issued tokens remain rejected.
 - JSON `{"noteId":"<UUID>"}` identifies precisely one record. Empty JSON
   is accepted **only if exactly one verified B snapshot differs from the
   corresponding current record**. Optional `dryRun:true` requests preview only.
@@ -72,6 +79,13 @@ If restoration wrote the note but a mandatory live HTTP retest failed,
 the endpoint returns **HTTP 503** with `restored:true`,
 `retestVerified:false`, failed status details and append-only failure
 audit. This is not a success verdict and is not treated as one.
+
+If the final **completion audit write** fails after the note has already
+been restored and independently re-read, the endpoint returns HTTP 503 with
+`restored:true`, `match.all:true`, `error:'completion_audit_unavailable'`,
+`completionAuditVerified:false` and `retestVerified:false`. No post-restore
+HTTP checks are executed in this condition. Their counts are unknown (`null`),
+never fabricated as completed. Existing audits and other notes are preserved.
 
 If a post-restore HTTP verification **audit write** fails after the note has
 already been restored and independently verified, the endpoint also returns
