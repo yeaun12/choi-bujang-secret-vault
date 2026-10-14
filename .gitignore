@@ -11,3 +11,5 @@ xdr/brute-force/deny-rules.json.*.tmp
 xdr/web-injection/deny-rules.json
 xdr/web-injection/deny-rules.json.*.tmp
 .stage10-sandbox/
+xdr/persistence/deny-rules.json
+xdr/persistence/deny-rules.json.*.tmp
