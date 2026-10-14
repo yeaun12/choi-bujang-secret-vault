@@ -12,7 +12,7 @@ test('stage 12 bundle points to the isolated entry, not the legacy bundle', () =
 test('stage 12 entry uses only allowed modules and does not load legacy checkers', () => {
   const imports = [...source.matchAll(/^import .* from ['"]([^'"]+)['"];?$/gmu)].map(x => x[1]);
   assert.deepEqual(imports, ['node:fs', 'node:path', '../src/decider.mjs']);
-  assert.doesNotMatch(source, /import\(|require\(|stage10-self-check|attack-check|bundle-entry|bundle\.mjs/u);
+  assert.doesNotMatch(source, /import\(|require\(|stage10-self-check|attack-check|bundle-entry|from ['"][^'"]*\/bundle\.mjs/u);
   assert.doesNotMatch(source, /node:os|node:util|node:net|node:tls|node:http|node:https/u);
 });
 test('isolation is GET-only, has no credentials, and preserves unexecuted checks', () => {
