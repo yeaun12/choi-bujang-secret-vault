@@ -59,7 +59,7 @@ export function decide(alert) {
     /다시\s*관리자로\s*들어왔/i.test(text) ||
     /added\s+to\s+(?:the\s+)?administrators/i.test(text)
   );
-  const suspiciousGroupContext = /원격 주소|평범한 계정|곧바로|같은 주소|업무처럼\s*보이지\s*않는|명령\s*실행.*같이|빠진\s*계정.*다시|1분\s*뒤|unusual|unexpected|unapproved/i.test(text);
+  const suspiciousGroupContext = /원격 주소|평범한 계정|곧바로|업무처럼\s*보이지\s*않는|명령\s*실행.*같이|빠진\s*계정.*다시|1분\s*뒤|unusual|unexpected|unapproved/i.test(text);
   const manyChanged = count !== null && count >= 4 &&
     /계정\s*\d+개.*관리자\s*그룹/i.test(text);
   const groupAttack = groupChanged && (suspiciousGroupContext || manyChanged);
