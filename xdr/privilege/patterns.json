@@ -9,31 +9,41 @@
       "name": "unexpected_administrator_group_change",
       "technique": "T1078",
       "decision": "block",
-      "evidence": "Confirmed administrator group change accompanied by an unusual source, ordinary-account promotion, rapid re-addition or correlated simultaneous privileged action."
+      "evidence": "Confirmed administrator group change accompanied by an unusual source, ordinary-account promotion, rapid re-addition or correlated simultaneous privileged action.",
+      "condition": "MITRE T1078; a confirmed administrator-group addition plus unusual account/source context, rapid re-addition, or confirmed multiple accounts.",
+      "rationale": "Confirmed administrator group change accompanied by an unusual source, ordinary-account promotion, rapid re-addition or correlated simultaneous privileged action."
     },
     {
       "name": "recent_privilege_gain_and_command",
       "technique": "T1068/T1078",
       "decision": "block",
-      "evidence": "Administrator command executed immediately after gaining administrative privileges."
+      "evidence": "Administrator command executed immediately after gaining administrative privileges.",
+      "condition": "MITRE T1068/T1078; a verified recent privilege grant immediately followed by a privileged command.",
+      "rationale": "Administrator command executed immediately after gaining administrative privileges."
     },
     {
       "name": "unusual_privileged_command",
       "technique": "T1068",
       "decision": "block",
-      "evidence": "Administrator command executed from an unfamiliar source, outside usual hours, or using another account's privileges."
+      "evidence": "Administrator command executed from an unfamiliar source, outside usual hours, or using another account's privileges.",
+      "condition": "MITRE T1068; a privileged command executed from an unfamiliar address, outside expected hours, or under another account.",
+      "rationale": "Administrator command executed from an unfamiliar source, outside usual hours, or using another account's privileges."
     },
     {
       "name": "unusual_privileged_session_change",
       "technique": "T1068",
       "decision": "block",
-      "evidence": "Confirmed unexpected session privilege elevation associated with an unfamiliar source."
+      "evidence": "Confirmed unexpected session privilege elevation associated with an unfamiliar source.",
+      "condition": "MITRE T1068; a privilege elevation in a session coupled to an unfamiliar source.",
+      "rationale": "Confirmed unexpected session privilege elevation associated with an unfamiliar source."
     },
     {
       "name": "privilege_context_needs_review",
       "technique": "T1068/T1078",
       "decision": "alert",
-      "evidence": "Privilege-related activity without enough corroboration for an automatic block."
+      "evidence": "Privilege-related activity without enough corroboration for an automatic block.",
+      "condition": "MITRE T1068/T1078; an incomplete, cancelled, unsuccessful, isolated or unclear privilege signal requiring review.",
+      "rationale": "Privilege-related activity without enough corroboration for an automatic block."
     }
   ],
   "guardrails": [
