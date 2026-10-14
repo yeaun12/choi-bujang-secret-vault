@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="BYTE BACK 안전 접속 자료실">
+  <rect width="512" height="512" rx="114" fill="#172b3f"/>
+  <rect x="83" y="83" width="346" height="346" rx="76" fill="#8ad8df"/>
+  <path d="M256 137l99 40v74c0 74-42 126-99 155-57-29-99-81-99-155v-74z" fill="#172b3f"/>
+  <rect x="211" y="243" width="90" height="86" rx="14" fill="#8ad8df"/>
+  <path d="M230 247v-19c0-36 52-36 52 0v19" fill="none" stroke="#8ad8df" stroke-width="20" stroke-linecap="round"/>
+</svg>
