@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import config from '../../aleph.config.json' with { type: 'json' };
 import { createLoginVerifier } from '../../src/verify-login.mjs';
+import { requireDeviceProof } from '../../src/stage11-device-proof.mjs';
 import { hasInstructorMembership, noticePath, validPrincipal } from '../../src/instructor-authorization.mjs';
 
 let database, verifyLogin;
@@ -17,6 +18,8 @@ async function authorize(request) {
   if (!database || !verifyLogin) return { response: json({ error: 'Unavailable.' }, 503) };
   const identity = await verifyLogin(request.headers.get('authorization'));
   if (!validPrincipal(identity)) return { response: json({ error: 'Authentication required.' }, 401) };
+  const deviceDenial = await requireDeviceProof(request, identity, database);
+  if (deviceDenial) return { response: deviceDenial };
   return { identity };
 }
 export async function GET(request) {
