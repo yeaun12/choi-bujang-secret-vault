@@ -73,6 +73,15 @@ the endpoint returns **HTTP 503** with `restored:true`,
 `retestVerified:false`, failed status details and append-only failure
 audit. This is not a success verdict and is not treated as one.
 
+If a post-restore HTTP verification **audit write** fails after the note has
+already been restored and independently verified, the endpoint also returns
+HTTP 503. In that case it reports `restored:true`, `match.all:true`,
+`retestVerified:false`, `error:'retest_evidence_unavailable'`, and
+`retest.evidenceUnavailable:true`. Executed/passed/failed retest counts are
+`null` (unknown), not invented zeros or successes; `retests:[]` contains no
+unverifiable entries. This evidence-loss state is distinct from a failed
+restoration, and is covered by a synthetic storage-failure regression test.
+
 ## Limits and interpretation
 
 - Local `npm run test:stage10` exercises the real code and signed **synthetic**
