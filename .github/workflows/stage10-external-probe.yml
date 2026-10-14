@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - stage10-diagnose-external-access-oct14
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
