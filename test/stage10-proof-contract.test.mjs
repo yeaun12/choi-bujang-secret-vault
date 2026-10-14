@@ -24,7 +24,11 @@ test('current Stage 10 README points to an unambiguous live evidence contract', 
 test('live proof description matches deployed restore response and outbound requests', () => {
   const restore = read('api/restore.js');
   const retest = read('src/stage10-postrestore-retest.mjs');
-  assert.match(restore, /restored: true, retestVerified: retest\.passed/u);
+  assert.match(restore, /const restoredEvidence = \{/u);
+  assert.match(restore, /restored: true,/u);
+  assert.match(restore, /retestVerified: retest\.passed/u);
+  assert.match(restore, /error: 'retest_evidence_unavailable'/u);
+  assert.match(restore, /retestVerified: false/u);
   assert.match(restore, /postRestoreRetest: \{/u);
   assert.match(restore, /creationAuditRereadBeforeRestore: true/u);
   assert.match(restore, /retest\.passed \? 200 : 503/u);
