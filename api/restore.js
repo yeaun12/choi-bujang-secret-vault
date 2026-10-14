@@ -167,6 +167,24 @@ export async function POST(request) {
       match: { ...match, all: match.id && match.ownerId && match.contentSha256 },
       scope: { restoredNotes: 1, otherNotesTouched: 0, auditPreserved: true },
     };
+    if (result.completionAuditVerified === false) {
+      // The data restoration was already committed and independently checked,
+      // but its completion audit did not persist. Do not run or invent retests.
+      trace('restore', 'completion_audit_unavailable', 503);
+      return json({
+        ...restoredEvidence,
+        error: 'completion_audit_unavailable',
+        completionAuditVerified: false,
+        retestVerified: false,
+        retest: { passed: false, complete: false, evidenceUnavailable: true,
+          executed: null, passedCount: null, failedCount: null,
+          normal: [], forbidden: [], notRun: [], skipped: [] },
+        postRestoreRetest: { success: false, evidenceUnavailable: true,
+          executed: null, passed: null, failed: null,
+          normal: [], forbidden: [], notRun: [] },
+        retests: [],
+      }, 503);
+    }
     let retest;
     try {
       // Real HTTP calls to the fixed production origin, not in-process GETs.

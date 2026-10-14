@@ -18,6 +18,7 @@ let backupReads = 0, server, baseUrl, tokenA, tokenB;
 let failNextBackupInsert = false;
 let failNextAuditInsert = false;
 let failNextRetestAuditInsert = false;
+let failNextCompletionAuditInsert = false;
 const backupReadsByNote = new Map();
 const oldUrl = process.env.SUPABASE_URL;
 const oldKey = process.env.SUPABASE_SECRET_KEY;
@@ -92,6 +93,12 @@ const database = {
   async function execute(single) {
     if (table === 'stage10_note_backups' && operation === 'select') backupReads++;
     if (operation === 'insert') {
+      if (table === 'stage10_restore_audit' && failNextCompletionAuditInsert
+          && fields?.event_kind === 'restore_verified'
+          && ['repaired', 'recreated', 'unchanged'].includes(fields?.reason_code)) {
+        failNextCompletionAuditInsert = false;
+        return { data: null, error: { code: 'synthetic_completion_audit_failure' } };
+      }
       if (table === 'stage10_restore_audit' && failNextRetestAuditInsert
           && typeof fields?.reason_code === 'string' && fields.reason_code.startsWith('retest_')) {
         failNextRetestAuditInsert = false;
@@ -215,6 +222,7 @@ function reset() {
   failNextBackupInsert = false;
   failNextAuditInsert = false;
   failNextRetestAuditInsert = false;
+  failNextCompletionAuditInsert = false;
   failNextNormalRetest = false;
   networkRetestRequests = [];
   backupReadsByNote.clear();
@@ -520,4 +528,33 @@ test('retest audit write failure preserves truthful restored result without fabr
   assert.ok(!tables.stage10_restore_audit.some(row =>
     row.note_id === b && row.reason_code?.startsWith('retest_')),
     'Do not claim missing retest audit evidence was persisted');
+});
+
+// Completion audit failures happen AFTER the note is verifiably restored.
+// They must not mask successful data restoration or manufacture retest proofs.
+test('verified B restore with failed completion audit reports restored true and retest unexecuted', async () => {
+  const { b, other } = await seed();
+  const before = structuredClone(tables.notes.find(row => row.id === other));
+  const backup = structuredClone(tables.stage10_note_backups.find(row => row.note_id === b));
+  assert.equal((await call('PUT', '/api/notes/' + b, tokenB,
+    { title: 'modified', body: 'modified after snapshot' })).status, 200);
+  failNextCompletionAuditInsert = true;
+  const response = await call('POST', '/api/restore', tokenB, { noteId: b });
+  assert.equal(response.status, 503, 'Missing completion audit cannot be presented as full success');
+  assert.equal(response.body.restored, true, 'Already verified persisted note must be reported as restored');
+  assert.equal(response.body.error, 'completion_audit_unavailable');
+  assert.equal(response.body.completionAuditVerified, false);
+  assert.equal(response.body.match.all, true);
+  assert.equal(response.body.id, b);
+  assert.equal(response.body.ownerId, backup.owner_id);
+  assert.equal(response.body.contentSha256, backup.content_sha256);
+  assert.equal(response.body.retestVerified, false);
+  assert.equal(response.body.retest.executed, null, 'No retests were run');
+  assert.deepEqual(response.body.retests, [], 'Do not fabricate successful checks');
+  assert.equal(networkRetestRequests.length, 0, 'Do not perform out-of-band retests after unverified audit');
+  assert.equal(sha256(tables.notes.find(row => row.id === b).content), backup.content_sha256);
+  assert.deepEqual(tables.notes.find(row => row.id === other), before);
+  assert.ok(!tables.stage10_restore_audit.some(row =>
+    row.note_id === b && row.event_kind === 'restore_verified'
+      && ['repaired', 'recreated'].includes(row.reason_code)));
 });
