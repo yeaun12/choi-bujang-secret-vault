@@ -1,6 +1,7 @@
 // Stage 12 isolated-judge bundle. Do not import earlier-stage self-checks.
 // Allowed runtime: node:fs, node:path, node:fs for checkout commit identification,
-// and public HTTPS GET only. Missing/unsupported checks are explicitly not_run.
+// Only auditable requests may have observed evidence. Judge returned NO matching
+// request trace for four public GETs, so none are made or claimed here.
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { RULE_IDS } from '../src/decider.mjs';
@@ -37,6 +38,7 @@ const commit = currentCommitFromCheckout();
 // Files in the one-purpose final squash commit. The list must be updated
 // if the final patch's file set changes; never invent runtime diff results.
 const changedFiles = [
+  '.github/workflows/stage12-ci.yml',
   'scripts/stage12-isolated-bundle.mjs',
   'test/stage12-hermetic-bundle.test.mjs',
 ];
@@ -49,52 +51,20 @@ if (typeof repoUrl !== 'string'
     || !/^https:\/\/github\.com\/[a-zA-Z0-9-]+\/[a-zA-Z0-9._-]+$/u.test(repoUrl)) {
   throw Error('Invalid GitHub repository URL.');
 }
-const app = new URL(config.publicAppUrl);
-if (app.protocol !== 'https:' || app.username || app.password
-    || app.search || app.hash || app.pathname !== '/'
-    || app.hostname === 'localhost' || app.hostname.endsWith('.example')) {
-  throw Error('Invalid public HTTPS app URL.');
-}
-
-// Do not send credentials, mutate data, or read private note bodies.
-async function publicGet(path) {
-  try {
-    const response = await fetch(new URL(path, app).href, { method: 'GET' });
-    return response.status;
-  } catch {
-    return null;
-  }
-}
-const observedGet = (status, expected) => status === null ? 'not_run'
-  : 'Observed public GET HTTP ' + status + (status === expected ? ' (expected).' : ' (unexpected).');
+// Local GET results do not establish an attackId-correlated judge trace.
 const notRun = (attackId, expected) => ({ attackId, expected, observed: 'not_run' });
 
-const [staticStatus, notesStatus, noticesStatus, roomStatus] = await Promise.all([
-  publicGet('/data.json'),
-  publicGet('/api/notes'),
-  publicGet('/api/instructor-notices'),
-  publicGet('/api/war-room'),
-]);
 const attackAttempts = [
-  {
-    attackId: 'static_note_file_removed',
-    expected: 'Public static note file must not be accessible (HTTP 404).',
-    observed: observedGet(staticStatus, 404),
-  },
-  {
-    attackId: 'anonymous_note_list_denied',
-    expected: 'Anonymous notes GET must be refused (HTTP 401).',
-    observed: observedGet(notesStatus, 401),
-  },
+  notRun('static_note_file_removed',
+    'Public static note file must not be accessible (HTTP 404); no matching judge request trace.'),
+  notRun('anonymous_note_list_denied',
+    'Anonymous notes GET must be refused (HTTP 401); no matching judge request trace.'),
   notRun('anonymous_note_create_denied',
     'Anonymous notes POST should be denied; write requests are not permitted in this sandbox.'),
   notRun('invalid_login_token_denied',
     'Bearer token error test was not executed by the public GET-only bundle.'),
-  {
-    attackId: 'anonymous_instructor_notice_read_denied',
-    expected: 'Anonymous instructor notices GET must be refused (HTTP 401).',
-    observed: observedGet(noticesStatus, 401),
-  },
+  notRun('anonymous_instructor_notice_read_denied',
+    'Anonymous instructor notices GET must be refused (HTTP 401); no matching judge request trace.'),
   notRun('anonymous_instructor_notice_create_denied',
     'Anonymous notice POST should be denied; write requests are not permitted in this sandbox.'),
   notRun('anonymous_note_restore_denied',
@@ -109,18 +79,15 @@ const attackAttempts = [
     'Previous synthetic restore tuple test requires a local test runner and is not executed.'),
   notRun('stage10_local_postrestore_retests',
     'Previous synthetic post-restore retest requires a local test runner and is not executed.'),
-  {
-    attackId: 'anonymous_war_room_read_denied',
-    expected: 'Anonymous war room GET must be refused (HTTP 401).',
-    observed: observedGet(roomStatus, 401),
-  },
+  notRun('anonymous_war_room_read_denied',
+    'Anonymous war room GET must be refused (HTTP 401); no matching judge request trace.'),
 ];
 if (attackAttempts.length > 20 || attackAttempts.some(x =>
     typeof x.expected !== 'string' || typeof x.observed !== 'string'
     || x.expected.length > 300 || x.observed.length > 300)) {
   throw Error('Invalid attack attempt records.');
 }
-const explanation = 'Stage 12: built a read-only operational war room and a 1-11 stage normal/denied request matrix. This bundle executes four public HTTPS GET probes, retains actual statuses, and marks writes, private checks and historical local tests not_run. The official 41-case assault has not been independently verified.';
+const explanation = 'Stage 12: built a read-only operational war room and a 1-11 stage normal/denied request matrix. The previous four public GET observations had no matching attackId request records in the isolated judge. This submission makes no network requests and marks all 13 checks not_run rather than claiming unverifiable evidence. The official 41-case assault has not been independently verified.';
 const bundle = {
   schema: 'aleph.defense.submission.v2', step: 12, commit, repoUrl,
   changedFiles, policyRules: [...RULE_IDS],

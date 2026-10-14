@@ -15,13 +15,20 @@ test('stage 12 entry uses only allowed modules and does not load legacy checkers
   assert.doesNotMatch(source, /import\(|require\(|stage10-self-check|attack-check|bundle-entry|from ['"][^'"]*\/bundle\.mjs/u);
   assert.doesNotMatch(source, /node:os|node:util|node:net|node:tls|node:http|node:https/u);
 });
-test('isolation is GET-only, has no credentials, and preserves unexecuted checks', () => {
-  assert.match(source, /method: 'GET'/u);
-  assert.doesNotMatch(source, /method: 'POST'|method: 'PUT'|method: 'DELETE'/u);
+test('unverifiable API GETs are not executed or claimed as observed', () => {
+  assert.doesNotMatch(source, /\bfetch\(|\bpublicGet\b|\bobservedGet\b|method: 'POST'|method: 'PUT'|method: 'DELETE'/u);
   assert.doesNotMatch(source, /Authorization:|Bearer [A-Za-z0-9._-]{12,}|https:\/\/.*@/u);
+  assert.equal((source.match(/^  notRun\('/gmu) || []).length, 13);
+  for (const id of [
+    'static_note_file_removed',
+    'anonymous_note_list_denied',
+    'anonymous_instructor_notice_read_denied',
+    'anonymous_war_room_read_denied',
+  ]) {
+    assert(source.includes("  notRun('" + id + "'"));
+  }
   assert.match(source, /observed: 'not_run'/u);
   assert.match(source, /official 41-case assault has not been independently verified/u);
-  assert.match(source, /new URL\(path, app\)\.href/u);
 });
 test('sandbox bundle launches zero subprocesses and reads checkout identity from fs', () => {
   assert.match(source, /function currentCommitFromCheckout\(/u);
