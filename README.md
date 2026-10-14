@@ -46,6 +46,8 @@
 6. **8단계 자원 구역:** 강사 공지 정상 조회 유지, 일반 학생의 공지 작성·수정과 전체 목록 우회는 거부.
 7. **9단계 이상 조회 탐지:** 동일 가명 주체의 10분 내 조회량 120건과 121건 경계에서 `observe`/`propose_revocation` 분기 확인.
 
+**복구 성공 응답의 증거 필드:** `backup.verified`, `backup.creationAuditVerified`, `backup.creationAuditRereadBeforeRestore`, `backup.rereadBeforeWrite`, `backup.noteId`/`backup.ownerId`/`backup.contentSha256`, 복구 결과의 `id`/`ownerId`/`contentSha256`, `match.all`을 확인합니다. 실제 정상·금지 HTTP 재시험이 모두 통과했을 때만 `retestVerified:true`, `retest.complete:true`, `retest.normal[]` 및 `retest.forbidden[]`의 결과가 포함된 HTTP 200 성공을 반환합니다. 미실행 항목은 `retest.notRun`으로 따로 보고합니다.
+
 **실행 상태의 구분:** `npm run test:stage10`은 로컬 합성 B 메모와 시험 저장소를 사용한 회귀 검증이고, `npm run bundle`은 공개 배포에 대한 비인증 HTTP 자기 점검과 로컬 검증을 각각 표시합니다. **공식 심판 B의 실제 백업 생성→변조/삭제→운영 복구→1~9단계 전체 공격 재시험은 별도 증거가 확보되지 않아 미실행/미확인입니다.** 실행하지 않은 시험은 `notRun` 또는 **미실행**으로 그대로 남겨 두며, 로컬 통과를 운영 복원·심판 통과라고 쓰지 않습니다.
 
 **재현 명령(로컬):**
@@ -459,3 +461,7 @@ git status --short
 제작 1~3의 로컬 탐지 테스트 11/11, `detect:test` 6/6, 기존 회귀 테스트 12/12는 저장점 직전 사용자 CMD에서 확인했습니다. 이번 설정·빌드 지원 변경 이후의 재검증은 별도로 필요합니다.
 
 `bundle-notes.json`은 Git에서 제외되는 로컬 파일이며 최소 `explanation` 10자 이상이 필요합니다. 커밋 반영 후 `npm run bundle`은 실측된 비인증 HTTP 결과와 커밋 정보를 `artifacts/submission.json`에 기록합니다. 두 JSON은 Git에 커밋하지 않습니다.
+
+---
+
+**구현 이력 참고(10단계 적용 절차는 이 README 맨 위에 완결됨):** `docs/STAGE10_LIVE_PROOF_CONTRACT.md`는 개발 중 자세한 검증 필드를 정리한 보조 참고 자료입니다. **수정 이전 방식(과거 기록)**의 동일 프로세스 내 GET 호출은 현재 사용하지 않으며, 복구 뒤 정상·금지 재시험은 실제 독립 HTTP 요청으로 수행합니다. 이 참고 파일이 없어도 위 10단계 절차를 그대로 읽고 확인할 수 있습니다.
