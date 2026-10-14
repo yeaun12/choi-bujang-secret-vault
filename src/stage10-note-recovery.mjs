@@ -246,10 +246,18 @@ export async function restoreOneJudgeBNote({ identity, noteId, repository }) {
     await audit('restore_failed', 'postrestore_mismatch');
     return { status: 503, code: 'postrestore_mismatch' };
   }
-  await audit('restore_verified', mode, backupAgain.content_sha256);
+  // The restored row has ALREADY been re-read and verified. If appending the
+  // completion audit now fails, do not report a failed restoration or repeat
+  // writes. The caller must expose the missing audit evidence as HTTP 503.
+  let completionAuditVerified = true;
+  try {
+    await audit('restore_verified', mode, backupAgain.content_sha256);
+  } catch {
+    completionAuditVerified = false;
+  }
   return { status: 200, noteId: verified.id, ownerId: verified.owner_id,
     contentSha256: sha256(verified.content), mode, changedFields, beforeSha256,
-    backup: backupEvidence(backupAgain) };
+    completionAuditVerified, backup: backupEvidence(backupAgain) };
 }
 
 // Fields that a restore would change. 'missing' means the row was deleted.
