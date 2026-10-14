@@ -1,9 +1,27 @@
 // XDR-04: standalone, one-alert persistence classifier for course fixtures.
 // No imports, files, network, environment state, or use of alert identifiers.
 const PATTERNS = Object.freeze([
-  { name: 'suspicious_autostart_registration', technique: 'T1543' },
-  { name: 'suspicious_scheduled_task', technique: 'T1053' },
-  { name: 'persistence_context_needs_review', technique: 'T1053/T1543' },
+  {
+    "name": "suspicious_autostart_registration",
+    "technique": "T1543",
+    "decision": "block",
+    "condition": "High severity, source, persistence action, explicit suspicious indicator, and temporary executable/startup folder or correlated unsigned service registrations.",
+    "rationale": "MITRE T1543: untrusted newly installed/modified services or startup entries can persist after system restart."
+  },
+  {
+    "name": "suspicious_scheduled_task",
+    "technique": "T1053",
+    "decision": "block",
+    "condition": "High-severity suspicious newly configured task with source and temporary executable.",
+    "rationale": "MITRE T1053: unfamiliar scheduled tasks launching temporary executables can re-establish execution after reboot."
+  },
+  {
+    "name": "persistence_context_needs_review",
+    "technique": "T1053/T1543",
+    "decision": "alert",
+    "condition": "Medium-severity persistence observation without enough corroboration to block.",
+    "rationale": "MITRE T1053/T1543: isolated or incomplete service/task changes require investigation rather than automatic denial."
+  }
 ]);
 
 const obj = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
